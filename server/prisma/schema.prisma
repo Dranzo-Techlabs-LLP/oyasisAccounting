@@ -1,0 +1,278 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+}
+
+enum PackageStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+enum BookingStatus {
+  CONFIRMED
+  TENTATIVE
+  CANCELLED
+  COMPLETED
+}
+
+enum PayeeType {
+  HOTEL
+  B2B
+  AGENT
+  TRANSPORT
+  GUIDE
+  ACTIVITY
+  AIRLINE
+  OTHER
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum TicketType {
+  FLIGHT
+  TRAIN
+  BUS
+  CAR
+  BOAT
+  FERRY
+  OTHER
+}
+
+enum TicketStatus {
+  PENDING
+  BOOKED
+  CANCELLED
+}
+
+enum DiscountType {
+  NONE
+  FLAT
+  PERCENTAGE
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(ADMIN)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Package {
+  id            Int           @id @default(autoincrement())
+  name          String
+  destination   String
+  durationDays  Int
+  durationNights Int
+  inclusions    Json
+  priceAdult    Decimal       @db.Decimal(10, 2)
+  priceChild    Decimal       @db.Decimal(10, 2)
+  maxPax        Int
+  availableDates Json
+  status        PackageStatus @default(ACTIVE)
+  coverImageUrl String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  bookings      Booking[]
+}
+
+model Customer {
+  id          Int       @id @default(autoincrement())
+  fullName    String
+  phone       String
+  email       String?   @unique
+  nationality String?
+  passportNo  String?
+  address     String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  bookings    Booking[]
+  ticketSales TicketSale[]
+}
+
+model Booking {
+  id             Int           @id @default(autoincrement())
+  bookingCode    String        @unique
+  customerId     Int
+  packageId      Int
+  departureDate  DateTime
+  adults         Int
+  children       Int
+  extraCharges   Json
+  discountType   DiscountType  @default(NONE)
+  discountValue  Decimal       @db.Decimal(10, 2)
+  discountAmount Decimal       @db.Decimal(10, 2)
+  subtotalAmount Decimal       @db.Decimal(10, 2)
+  totalAmount    Decimal       @db.Decimal(10, 2)
+  paidAmount     Decimal       @db.Decimal(10, 2)
+  balanceDue     Decimal       @db.Decimal(10, 2)
+  paymentStatus  PaymentStatus @default(PENDING)
+  bookingStatus  BookingStatus @default(CONFIRMED)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  travelPackage  Package       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  payments       Payment[]
+  travellers     BookingTraveller[]
+  payouts        BookingPayout[]
+  attachments    BookingAttachment[]
+  tickets        BookingTicket[]
+  invoice        Invoice?
+}
+
+model BookingTicket {
+  id            Int          @id @default(autoincrement())
+  bookingId     Int
+  ticketType    TicketType   @default(FLIGHT)
+  vendor        String?
+  reference     String?
+  fromLocation  String?
+  toLocation    String?
+  departAt      DateTime?
+  returnAt      DateTime?
+  passengers    Int          @default(1)
+  amount        Decimal      @db.Decimal(10, 2) @default(0)
+  status        TicketStatus @default(BOOKED)
+  note          String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  booking       Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model TicketSale {
+  id               Int           @id @default(autoincrement())
+  saleCode         String        @unique
+  customerId       Int
+  ticketType       TicketType    @default(FLIGHT)
+  vendor           String?
+  reference        String?
+  fromLocation     String?
+  toLocation       String?
+  departAt         DateTime?
+  returnAt         DateTime?
+  passengers       Int           @default(1)
+  costPrice        Decimal       @db.Decimal(10, 2) @default(0)
+  sellingPrice     Decimal       @db.Decimal(10, 2)
+  serviceFee       Decimal       @db.Decimal(10, 2) @default(0)
+  discountAmount   Decimal       @db.Decimal(10, 2) @default(0)
+  totalAmount      Decimal       @db.Decimal(10, 2)
+  paidAmount       Decimal       @db.Decimal(10, 2) @default(0)
+  balanceDue       Decimal       @db.Decimal(10, 2)
+  paymentStatus    PaymentStatus @default(PENDING)
+  status           TicketStatus  @default(BOOKED)
+  supplierName     String?
+  supplierPaid     Boolean       @default(false)
+  supplierPaidDate DateTime?
+  note             String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  customer         Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  payments         TicketSalePayment[]
+  attachments      TicketSaleAttachment[]
+}
+
+model TicketSaleAttachment {
+  id           Int      @id @default(autoincrement())
+  ticketSaleId Int
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  label        String?
+  uploadedAt   DateTime @default(now())
+  ticketSale   TicketSale @relation(fields: [ticketSaleId], references: [id], onDelete: Cascade)
+}
+
+model TicketSalePayment {
+  id           Int      @id @default(autoincrement())
+  ticketSaleId Int
+  amount       Decimal  @db.Decimal(10, 2)
+  paymentDate  DateTime @default(now())
+  method       String
+  note         String?
+  ticketSale   TicketSale @relation(fields: [ticketSaleId], references: [id], onDelete: Cascade)
+}
+
+model BookingTraveller {
+  id         Int      @id @default(autoincrement())
+  bookingId  Int
+  fullName   String
+  age        Int?
+  gender     String?
+  passportNo String?
+  phone      String?
+  isPrimary  Boolean  @default(false)
+  note       String?
+  createdAt  DateTime @default(now())
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model BookingPayout {
+  id          Int          @id @default(autoincrement())
+  bookingId   Int
+  payeeType   PayeeType    @default(OTHER)
+  payeeName   String
+  amount      Decimal      @db.Decimal(10, 2)
+  status      PayoutStatus @default(PENDING)
+  dueDate     DateTime?
+  paidDate    DateTime?
+  reference   String?
+  note        String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  booking     Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model BookingAttachment {
+  id           Int      @id @default(autoincrement())
+  bookingId    Int
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  label        String?
+  uploadedAt   DateTime @default(now())
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id          Int      @id @default(autoincrement())
+  bookingId   Int
+  amount      Decimal  @db.Decimal(10, 2)
+  paymentDate DateTime @default(now())
+  method      String
+  note        String?
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id            Int      @id @default(autoincrement())
+  bookingId     Int      @unique
+  invoiceNumber String   @unique
+  issuedDate    DateTime @default(now())
+  sentStatus    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}

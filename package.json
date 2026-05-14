@@ -1,0 +1,14 @@
+{
+  "name": "oasisgo-holidays",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "db:generate": "pnpm --filter server prisma generate",
+    "db:push": "pnpm --filter server prisma db push",
+    "db:seed": "pnpm --filter server prisma db seed"
+  }
+}

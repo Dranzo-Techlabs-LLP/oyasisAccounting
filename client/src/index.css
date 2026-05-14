@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --bg: #f7fbfb;
+  --surface: #ffffff;
+  --surface-muted: #edf6f5;
+  --line: #d7e8e6;
+  --text: #123636;
+  --text-soft: #5f7676;
+  --brand: #0d6e6e;
+  --brand-dark: #084f4f;
+  --accent: #f5a623;
+  --danger: #dc5d5d;
+  --shadow: 0 24px 60px rgba(13, 110, 110, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Sora", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(245, 166, 35, 0.14), transparent 30%),
+    linear-gradient(180deg, #fafdfe 0%, #f4f9f8 55%, #eef6f5 100%);
+  color: var(--text);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(215, 232, 230, 0.9);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(13, 110, 110, 0.18);
+  border-radius: 999px;
+}
