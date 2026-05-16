@@ -61,6 +61,9 @@ const settingsSchema = z.object({
   bookingNextNumber: z.coerce.number().int().min(1).optional(),
   ticketSalePrefix: z.string().min(1).optional(),
   ticketSaleNextNumber: z.coerce.number().int().min(1).optional(),
+  vendorInvoicePrefix: z.string().min(1).optional(),
+  vendorInvoiceNextNumber: z.coerce.number().int().min(1).optional(),
+  vendorInvoiceUseYear: z.boolean().optional(),
   invoiceTerms: z.string().optional().nullable()
 });
 

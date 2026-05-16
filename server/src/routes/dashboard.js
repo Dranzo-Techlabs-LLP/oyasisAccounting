@@ -53,11 +53,27 @@ router.get("/summary", async (_req, res) => {
     })
   ]);
 
-  const [payoutAggAll, payoutAggPending, supplierPendingTicketsAgg] = await Promise.all([
+  const [payoutAggAll, payoutAggPending, supplierPendingTicketsAgg, vendorInvoiceAgg, vendorInvoicePendingAgg, ledgerAgg] = await Promise.all([
     prisma.bookingPayout.aggregate({ _sum: { amount: true } }),
     prisma.bookingPayout.aggregate({ where: { status: "PENDING" }, _sum: { amount: true } }),
-    prisma.ticketSale.aggregate({ where: { supplierPaid: false }, _sum: { costPrice: true } })
+    prisma.ticketSale.aggregate({ where: { supplierPaid: false }, _sum: { costPrice: true } }),
+    prisma.vendorInvoice.aggregate({
+      where: { issueDate: { gte: monthStart, lte: monthEnd } },
+      _sum: { totalAmount: true, paidAmount: true }
+    }),
+    prisma.vendorInvoice.aggregate({
+      where: { status: { in: ["SENT", "OVERDUE", "DRAFT"] } },
+      _sum: { balanceDue: true }
+    }),
+    prisma.ledgerEntry.groupBy({
+      by: ["kind"],
+      where: { txDate: { gte: monthStart, lte: monthEnd } },
+      _sum: { amount: true }
+    })
   ]);
+
+  const manualIncome = toNumber(ledgerAgg.find((r) => r.kind === "INCOME")?._sum?.amount);
+  const manualExpense = toNumber(ledgerAgg.find((r) => r.kind === "EXPENSE")?._sum?.amount);
 
   const revenueByMonthMap = new Map();
   const statusCounts = {
@@ -116,7 +132,18 @@ router.get("/summary", async (_req, res) => {
       totalRevenueThisMonth: bookingRevenueMonth + ticketRevenueMonth,
       totalCustomerPending: bookingPending + ticketPending,
       supplierPayoutsAll: payoutsAll,
-      supplierPayoutsPending: payoutsPending + supplierTicketPending
+      supplierPayoutsPending: payoutsPending + supplierTicketPending,
+      // vendor invoices (B2B)
+      vendorInvoicedThisMonth: toNumber(vendorInvoiceAgg._sum.totalAmount),
+      vendorCollectedThisMonth: toNumber(vendorInvoiceAgg._sum.paidAmount),
+      vendorOutstanding: toNumber(vendorInvoicePendingAgg._sum.balanceDue),
+      // ledger this month
+      ledgerIncomeThisMonth: manualIncome,
+      ledgerExpenseThisMonth: manualExpense,
+      // headline: total income (booking+ticket+manual) vs total expense (payouts paid this month + manual)
+      incomeThisMonth: bookingRevenueMonth + ticketRevenueMonth + manualIncome,
+      expenseThisMonth: manualExpense,
+      netThisMonth: (bookingRevenueMonth + ticketRevenueMonth + manualIncome) - manualExpense
     },
     recentBookings: recentBookings.map((booking) => ({
       id: booking.id,

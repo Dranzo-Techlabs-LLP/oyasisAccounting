@@ -19,6 +19,9 @@ import ticketSalesRoutes from "./routes/ticketSales.js";
 import settingsRoutes from "./routes/settings.js";
 import usersRoutes from "./routes/users.js";
 import calendarRoutes from "./routes/calendar.js";
+import vendorsRoutes from "./routes/vendors.js";
+import vendorInvoicesRoutes from "./routes/vendorInvoices.js";
+import ledgerRoutes from "./routes/ledger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +52,9 @@ app.use("/api/ticket-sales", requireAuth, ticketSalesRoutes);
 app.use("/api/settings", requireAuth, settingsRoutes);
 app.use("/api/users", requireAuth, usersRoutes);
 app.use("/api/calendar", requireAuth, calendarRoutes);
+app.use("/api/vendors", requireAuth, vendorsRoutes);
+app.use("/api/vendor-invoices", requireAuth, vendorInvoicesRoutes);
+app.use("/api/ledger", requireAuth, ledgerRoutes);
 
 const clientDist = path.resolve(__dirname, "../../client/dist");
 if (fs.existsSync(clientDist)) {

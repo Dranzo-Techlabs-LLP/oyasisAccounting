@@ -50,6 +50,35 @@ export default function DashboardPage() {
 
   return (
     <div className="grid gap-5">
+      {/* P&L snapshot */}
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-soft)]">P&L Snapshot · This Month</p>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="panel rounded-lg p-5">
+            <p className="text-sm text-[var(--text-soft)]">Total Income</p>
+            <p className="mt-3 text-2xl font-semibold text-emerald-700 xl:text-3xl">{formatCurrency(data.kpis.incomeThisMonth ?? 0)}</p>
+            <p className="mt-1 text-[10px] text-[var(--text-faint)]">Bookings + Ticket Sales + Manual</p>
+          </div>
+          <div className="panel rounded-lg p-5">
+            <p className="text-sm text-[var(--text-soft)]">Total Expense</p>
+            <p className="mt-3 text-2xl font-semibold text-rose-600 xl:text-3xl">{formatCurrency(data.kpis.expenseThisMonth ?? 0)}</p>
+            <p className="mt-1 text-[10px] text-[var(--text-faint)]">Manual entries · payouts auto-mirror</p>
+          </div>
+          <div className="panel rounded-lg p-5">
+            <p className="text-sm text-[var(--text-soft)]">Net</p>
+            <p className={`mt-3 text-2xl font-semibold xl:text-3xl ${(data.kpis.netThisMonth ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+              {formatCurrency(data.kpis.netThisMonth ?? 0)}
+            </p>
+            <p className="mt-1 text-[10px] text-[var(--text-faint)]">Income − Expense</p>
+          </div>
+          <div className="panel rounded-lg p-5">
+            <p className="text-sm text-[var(--text-soft)]">B2B Outstanding</p>
+            <p className="mt-3 text-2xl font-semibold text-amber-700 xl:text-3xl">{formatCurrency(data.kpis.vendorOutstanding ?? 0)}</p>
+            <p className="mt-1 text-[10px] text-[var(--text-faint)]">Across DRAFT / SENT / OVERDUE</p>
+          </div>
+        </div>
+      </div>
+
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-soft)]">Combined (Bookings + Ticket Sales)</p>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

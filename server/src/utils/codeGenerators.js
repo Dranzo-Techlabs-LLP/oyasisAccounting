@@ -21,6 +21,19 @@ export const nextTicketSaleCode = async (prisma) => {
   return `${prefix}-${pad(num)}`;
 };
 
+export const nextVendorInvoiceNumber = async (prisma) => {
+  const s = await getSettings();
+  const prefix = s.vendorInvoicePrefix || "B2B";
+  const useYear = s.vendorInvoiceUseYear !== false;
+  const num = s.vendorInvoiceNextNumber || (await prisma.vendorInvoice.count()) + 1;
+  await prisma.setting.update({ where: { id: 1 }, data: { vendorInvoiceNextNumber: num + 1 } });
+  invalidateSettings();
+  if (useYear) {
+    return `${prefix}-${dayjs().year()}-${pad(num, 4)}`;
+  }
+  return `${prefix}-${pad(num, 4)}`;
+};
+
 export const nextInvoiceNumber = async (prisma) => {
   const s = await getSettings();
   const prefix = s.invoicePrefix || "OGH";

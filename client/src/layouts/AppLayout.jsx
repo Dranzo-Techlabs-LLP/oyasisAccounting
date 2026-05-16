@@ -14,6 +14,9 @@ const pageTitles = {
   "/calendar": ["Calendar", "All departures at a glance."],
   "/overview": ["Bookings Overview", "Monthly view by departure date."],
   "/accounts": ["Accounts", "Invoices, collections, margins, and supplier payouts."],
+  "/vendors": ["Vendors & B2B", "Agents, corporate clients, hotels and suppliers."],
+  "/b2b-invoices": ["B2B Invoices", "Custom invoices with line items for B2B partners."],
+  "/ledger": ["Income & Expense", "Manual entries + auto entries from bookings, sales, payouts."],
   "/settings": ["Settings", "Business details, branding, document series, and bank info."],
   "/users": ["Users & Roles", "Team accounts and permissions."]
 };

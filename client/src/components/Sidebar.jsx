@@ -1,6 +1,9 @@
 import {
+  Building2,
   CalendarRange,
   ClipboardList,
+  FileBarChart2,
+  FileText,
   LayoutDashboard,
   LogOut,
   PanelLeftClose,
@@ -24,6 +27,9 @@ const ITEMS = [
   { key: "ticketSales", to: "/ticket-sales", icon: Plane,           label: "Ticket Sales" },
   { key: "calendar",    to: "/calendar",     icon: CalendarRange,   label: "Calendar" },
   { key: "overview",    to: "/overview",     icon: ClipboardList,   label: "Overview" },
+  { key: "vendors",     to: "/vendors",      icon: Building2,       label: "Vendors" },
+  { key: "vendorInvoices", to: "/b2b-invoices", icon: FileText,    label: "B2B Invoices" },
+  { key: "ledger",      to: "/ledger",       icon: FileBarChart2,   label: "Income / Expense" },
   { key: "accounts",    to: "/accounts",     icon: ReceiptText,     label: "Accounts" }
 ];
 

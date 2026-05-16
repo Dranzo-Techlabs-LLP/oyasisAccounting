@@ -14,6 +14,9 @@ import TicketSalesPage from "./pages/TicketSalesPage";
 import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
 import CalendarPage from "./pages/CalendarPage";
+import VendorsPage from "./pages/VendorsPage";
+import VendorInvoicesPage from "./pages/VendorInvoicesPage";
+import LedgerPage from "./pages/LedgerPage";
 import { FullPageLoader, EmptyState } from "./components/Feedback";
 
 function ProtectedRoute({ children }) {
@@ -54,6 +57,9 @@ export default function App() {
         <Route path="overview" element={<BookingsOverviewPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="ticket-sales" element={<TicketSalesPage />} />
+        <Route path="vendors" element={<VendorsPage />} />
+        <Route path="b2b-invoices" element={<VendorInvoicesPage />} />
+        <Route path="ledger" element={<LedgerPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />
         <Route path="users" element={<AdminOnly><UsersPage /></AdminOnly>} />

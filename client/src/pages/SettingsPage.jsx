@@ -199,6 +199,25 @@ export default function SettingsPage() {
               disabled={disabled}
             />
             <div className="rounded-md border border-[var(--line)] bg-white p-4 sm:col-span-2">
+              <p className="text-sm font-semibold text-[var(--text)]">B2B / Vendor Invoice Number</p>
+              <p className="mt-0.5 text-xs text-[var(--text-soft)]">Used for custom invoices sent to B2B partners, agents, corporates, suppliers.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <Field label="Prefix"><Input value={data.vendorInvoicePrefix || ""} disabled={disabled} onChange={(e) => update({ vendorInvoicePrefix: e.target.value })} /></Field>
+                <Field label="Next Number"><Input type="number" min="1" value={data.vendorInvoiceNextNumber || 1} disabled={disabled} onChange={(e) => update({ vendorInvoiceNextNumber: Number(e.target.value) || 1 })} /></Field>
+                <Field label="Include Year">
+                  <Select value={data.vendorInvoiceUseYear ? "yes" : "no"} disabled={disabled} onChange={(e) => update({ vendorInvoiceUseYear: e.target.value === "yes" })}>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </Select>
+                </Field>
+              </div>
+              <p className="mt-3 text-xs text-[var(--text-soft)]">
+                Preview: <span className="font-mono font-semibold text-[var(--text)]">
+                  {data.vendorInvoicePrefix || "B2B"}{data.vendorInvoiceUseYear ? `-${new Date().getFullYear()}` : ""}-{String(data.vendorInvoiceNextNumber || 1).padStart(4, "0")}
+                </span>
+              </p>
+            </div>
+            <div className="rounded-md border border-[var(--line)] bg-white p-4 sm:col-span-2">
               <p className="text-sm font-semibold text-[var(--text)]">Invoice Number</p>
               <p className="mt-0.5 text-xs text-[var(--text-soft)]">Format: PREFIX-[YEAR-]NUMBER</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
