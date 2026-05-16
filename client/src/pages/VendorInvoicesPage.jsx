@@ -15,6 +15,7 @@ import { downloadBlob, formatCurrency, formatDate, readBlobText, viewBlobInNewTa
 export default function VendorInvoicesPage() {
   const [items, setItems] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -25,12 +26,14 @@ export default function VendorInvoicesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [a, b] = await Promise.all([
+      const [a, b, c] = await Promise.all([
         api.get("/vendor-invoices"),
-        api.get("/vendors")
+        api.get("/vendors"),
+        api.get("/bookings")
       ]);
       setItems(a.data.items);
       setVendors(b.data.items);
+      setBookings(c.data.items || []);
     } catch (e) {
       toast.error(e.response?.data?.message || "Failed to load");
     } finally { setLoading(false); }
@@ -243,7 +246,7 @@ export default function VendorInvoicesPage() {
       )}
 
       <Modal open={open} onClose={() => { setOpen(false); setEditing(null); }} title={editing ? `Edit ${editing.invoiceNumber}` : "New B2B Invoice"} width="max-w-5xl">
-        <VendorInvoiceForm vendors={vendors} initialValues={editing} busy={busy} onSubmit={submit} />
+        <VendorInvoiceForm vendors={vendors} bookings={bookings} initialValues={editing} busy={busy} onSubmit={submit} />
       </Modal>
 
       {paymentTarget && (

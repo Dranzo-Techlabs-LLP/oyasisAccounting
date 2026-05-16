@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Link as LinkIcon } from "lucide-react";
 import { Button, Field, Input, Select, Textarea } from "./FormPrimitives";
-import { formatCurrency } from "../utils/formatters";
+import { formatCurrency, formatDate } from "../utils/formatters";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -28,8 +28,9 @@ const initial = {
   items: [blankItem()]
 };
 
-export default function VendorInvoiceForm({ vendors, initialValues, onSubmit, busy }) {
+export default function VendorInvoiceForm({ vendors, bookings = [], initialValues, onSubmit, busy }) {
   const [form, setForm] = useState(initial);
+  const [bookingPick, setBookingPick] = useState("");
   const isEdit = Boolean(initialValues?.id);
 
   useEffect(() => {
@@ -83,6 +84,44 @@ export default function VendorInvoiceForm({ vendors, initialValues, onSubmit, bu
     ...c,
     items: c.items.length > 1 ? c.items.filter((_, i) => i !== idx) : c.items
   }));
+
+  const buildBookingDescription = (b) => {
+    const pkg = b.travelPackage || {};
+    const parts = [
+      `Booking ${b.bookingCode}`,
+      pkg.name,
+      pkg.destination,
+      pkg.durationDays && `${pkg.durationDays}D / ${pkg.durationNights}N`,
+      b.departureDate && `Depart ${formatDate(b.departureDate)}${b.endDate ? ` → ${formatDate(b.endDate)}` : ""}`
+    ].filter(Boolean);
+    return parts.join(" · ");
+  };
+
+  const appendBookingLine = () => {
+    if (!bookingPick) return;
+    const b = bookings.find((x) => String(x.id) === String(bookingPick));
+    if (!b) return;
+    const pax = Number(b.adults || 0) + Number(b.children || 0);
+    const newItem = {
+      description: buildBookingDescription(b),
+      hsnCode: "",
+      quantity: pax || 1,
+      unitPrice: 0,
+      taxRate: 0,
+      discountAmount: 0,
+      _bookingId: b.id
+    };
+    setForm((c) => {
+      const firstEmpty = c.items.findIndex((it) => !it.description && !Number(it.unitPrice));
+      if (firstEmpty !== -1) {
+        const items = c.items.slice();
+        items[firstEmpty] = { ...items[firstEmpty], ...newItem };
+        return { ...c, items };
+      }
+      return { ...c, items: [...c.items, newItem] };
+    });
+    setBookingPick("");
+  };
 
   return (
     <form className="grid gap-4" onSubmit={(e) => {
@@ -156,6 +195,45 @@ export default function VendorInvoiceForm({ vendors, initialValues, onSubmit, bu
           </button>
         </div>
 
+        {/* Booking picker */}
+        <div className="mb-3 rounded-md border border-dashed border-[var(--line)] bg-[var(--surface-muted)] p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <LinkIcon className="h-3.5 w-3.5 text-[var(--brand)]" />
+            <p className="text-xs font-semibold text-[var(--text)]">Pre-fill from a Booking (optional)</p>
+          </div>
+          <p className="mb-2 text-[11px] text-[var(--text-soft)]">
+            Pick a booking to inject its package details + pax count as a line item. Rate is left blank — set your B2B price manually.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <Select value={bookingPick} onChange={(e) => setBookingPick(e.target.value)}>
+              <option value="">Select a booking…</option>
+              {bookings.map((b) => {
+                const pkg = b.travelPackage || {};
+                const pax = Number(b.adults || 0) + Number(b.children || 0);
+                return (
+                  <option key={b.id} value={b.id}>
+                    {b.bookingCode} · {pkg.name || "Package"} · {pkg.destination || ""} · {pax} pax
+                  </option>
+                );
+              })}
+            </Select>
+            <Button type="button" variant="secondary" onClick={appendBookingLine} disabled={!bookingPick}>
+              <Plus className="h-4 w-4" /> Add as line item
+            </Button>
+          </div>
+        </div>
+
+        {/* Column headers */}
+        <div className="mb-2 hidden gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-soft)] lg:grid lg:grid-cols-[1.5fr_90px_90px_110px_80px_80px_40px]">
+          <span>Description</span>
+          <span>HSN / SAC</span>
+          <span className="text-right">Qty / Pax</span>
+          <span className="text-right">Rate</span>
+          <span className="text-right">Discount</span>
+          <span className="text-right">Tax %</span>
+          <span></span>
+        </div>
+
         <div className="space-y-3">
           {form.items.map((it, i) => {
             const qty = Number(it.quantity || 0);
@@ -168,18 +246,36 @@ export default function VendorInvoiceForm({ vendors, initialValues, onSubmit, bu
             return (
               <div key={i} className="rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-3">
                 <div className="grid gap-2 lg:grid-cols-[1.5fr_90px_90px_110px_80px_80px_40px]">
-                  <Input placeholder="Description (service / line)" value={it.description}
-                    onChange={(e) => setItem(i, { description: e.target.value })} />
-                  <Input placeholder="HSN/SAC" value={it.hsnCode}
-                    onChange={(e) => setItem(i, { hsnCode: e.target.value })} />
-                  <Input type="number" min="0" step="0.01" placeholder="Qty" value={it.quantity}
-                    onChange={(e) => setItem(i, { quantity: e.target.value })} />
-                  <Input type="number" min="0" step="0.01" placeholder="Rate" value={it.unitPrice}
-                    onChange={(e) => setItem(i, { unitPrice: e.target.value })} />
-                  <Input type="number" min="0" step="0.01" placeholder="Disc." value={it.discountAmount}
-                    onChange={(e) => setItem(i, { discountAmount: e.target.value })} />
-                  <Input type="number" min="0" max="100" step="0.01" placeholder="Tax %" value={it.taxRate}
-                    onChange={(e) => setItem(i, { taxRate: e.target.value })} />
+                  <div>
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-soft)] lg:hidden">Description</span>
+                    <Input aria-label="Description" placeholder="Description (service / line)" value={it.description}
+                      onChange={(e) => setItem(i, { description: e.target.value })} />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-soft)] lg:hidden">HSN / SAC</span>
+                    <Input aria-label="HSN / SAC" placeholder="HSN/SAC" value={it.hsnCode}
+                      onChange={(e) => setItem(i, { hsnCode: e.target.value })} />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-soft)] lg:hidden">Qty / Pax</span>
+                    <Input aria-label="Quantity" type="number" min="0" step="0.01" placeholder="Qty" value={it.quantity}
+                      onChange={(e) => setItem(i, { quantity: e.target.value })} />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-soft)] lg:hidden">Rate</span>
+                    <Input aria-label="Unit Rate" type="number" min="0" step="0.01" placeholder="Rate" value={it.unitPrice}
+                      onChange={(e) => setItem(i, { unitPrice: e.target.value })} />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-soft)] lg:hidden">Discount</span>
+                    <Input aria-label="Discount" type="number" min="0" step="0.01" placeholder="Disc." value={it.discountAmount}
+                      onChange={(e) => setItem(i, { discountAmount: e.target.value })} />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-soft)] lg:hidden">Tax %</span>
+                    <Input aria-label="Tax percent" type="number" min="0" max="100" step="0.01" placeholder="Tax %" value={it.taxRate}
+                      onChange={(e) => setItem(i, { taxRate: e.target.value })} />
+                  </div>
                   <button type="button" onClick={() => removeItem(i)} aria-label="Remove"
                     disabled={form.items.length === 1}
                     className="flex h-11 items-center justify-center rounded-md border border-[var(--line)] bg-white text-[var(--text-soft)] hover:text-red-600 disabled:opacity-40">
