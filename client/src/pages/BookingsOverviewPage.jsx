@@ -24,7 +24,7 @@ function OverviewList({ title, items }) {
                     {item.travelPackage.name} | {item.travelPackage.destination}
                   </p>
                   <p className="mt-1 text-sm text-[var(--text-soft)]">
-                    Departure {formatDate(item.departureDate)} | {item.adults + item.children} pax
+                    {formatDate(item.departureDate)}{item.endDate ? ` → ${formatDate(item.endDate)}` : ""} | {item.adults + item.children} pax
                   </p>
                 </div>
                 <div className="text-right">

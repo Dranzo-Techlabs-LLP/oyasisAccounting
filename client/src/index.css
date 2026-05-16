@@ -2,17 +2,61 @@
 
 :root {
   color-scheme: light;
-  --bg: #f7fbfb;
+  /* Surfaces */
+  --bg: #f7faff;
   --surface: #ffffff;
-  --surface-muted: #edf6f5;
-  --line: #d7e8e6;
-  --text: #123636;
-  --text-soft: #5f7676;
-  --brand: #0d6e6e;
-  --brand-dark: #084f4f;
-  --accent: #f5a623;
-  --danger: #dc5d5d;
-  --shadow: 0 24px 60px rgba(13, 110, 110, 0.12);
+  --surface-muted: #eef3fa;
+  --surface-elevated: #ffffff;
+
+  /* Lines & dividers */
+  --line: #dbe4f0;
+  --line-strong: #bccbe2;
+
+  /* Text */
+  --text: #142447;
+  --text-soft: #57658a;
+  --text-faint: #8b97b3;
+
+  /* Brand (navy from Oyasis logo ring) */
+  --brand: #1d3a6e;
+  --brand-dark: #162a52;
+  --brand-light: #2a4f93;
+  --brand-soft: rgba(29, 58, 110, 0.08);
+  --brand-ring: rgba(29, 58, 110, 0.20);
+
+  /* Accent (orange sun from logo) */
+  --accent: #f08826;
+  --accent-dark: #d36f0e;
+  --accent-soft: rgba(240, 136, 38, 0.12);
+
+  /* Ice blue (mountain highlight from logo) */
+  --ice: #a9d4e9;
+  --ice-soft: rgba(169, 212, 233, 0.18);
+
+  /* Semantic */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #e0517a;
+  --info: #3b82f6;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(13, 50, 50, 0.04), 0 1px 1px rgba(13, 50, 50, 0.03);
+  --shadow-md: 0 4px 12px rgba(13, 50, 50, 0.06), 0 2px 4px rgba(13, 50, 50, 0.04);
+  --shadow-lg: 0 16px 40px rgba(13, 110, 110, 0.10), 0 4px 12px rgba(13, 50, 50, 0.05);
+  --shadow-xl: 0 32px 80px rgba(13, 110, 110, 0.14), 0 8px 24px rgba(13, 50, 50, 0.06);
+  --shadow: var(--shadow-lg); /* back-compat */
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
 }
 
 * {
@@ -27,11 +71,18 @@ body,
 
 body {
   margin: 0;
-  font-family: "Sora", "Segoe UI", sans-serif;
+  font-family: "Sora", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   background:
-    radial-gradient(circle at top left, rgba(245, 166, 35, 0.14), transparent 30%),
-    linear-gradient(180deg, #fafdfe 0%, #f4f9f8 55%, #eef6f5 100%);
+    radial-gradient(circle at top left, rgba(240, 136, 38, 0.10), transparent 35%),
+    radial-gradient(circle at top right, rgba(29, 58, 110, 0.07), transparent 40%),
+    linear-gradient(180deg, #fbfcff 0%, #f3f7fd 55%, #e9eff8 100%);
+  background-attachment: fixed;
   color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 a {
@@ -46,23 +97,86 @@ textarea {
   font: inherit;
 }
 
+/* Better focus ring everywhere (overridable) */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 .app-shell {
   min-height: 100vh;
 }
 
 .panel {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(215, 232, 230, 0.9);
-  box-shadow: var(--shadow);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(219, 228, 240, 0.95);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   backdrop-filter: blur(10px);
+  transition: box-shadow var(--duration-base) var(--ease-out);
 }
 
-.scrollbar-thin::-webkit-scrollbar {
+.panel:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Scrollbar (subtle modern) */
+.scrollbar-thin::-webkit-scrollbar,
+*::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(13, 110, 110, 0.18);
+.scrollbar-thin::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: rgba(29, 58, 110, 0.20);
   border-radius: 999px;
+}
+.scrollbar-thin::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(29, 58, 110, 0.36);
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-muted) 0%, #f5fafa 50%, var(--surface-muted) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* Page-level entrance */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeInUp var(--duration-base) var(--ease-out);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Headings rhythm */
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Sora", "Inter", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+/* Tabular numerals for money/data */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

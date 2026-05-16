@@ -56,11 +56,18 @@ router.get("/:bookingId/pdf", async (req, res) => {
     return res.status(404).json({ message: "Booking not found" });
   }
 
-  const pdf = await buildInvoicePdf(booking);
+  const opts = {
+    showGstin: req.query.showGstin !== "0",
+    includeBank: req.query.includeBank !== "0",
+    taxRate: Number(req.query.taxRate || 0),
+    notes: req.query.notes ? String(req.query.notes) : ""
+  };
+  const pdf = await buildInvoicePdf(booking, opts);
+  const inline = req.query.inline === "1";
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${booking.invoice.invoiceNumber}.pdf"`
+    `${inline ? "inline" : "attachment"}; filename="${booking.invoice.invoiceNumber}.pdf"`
   );
   res.send(pdf);
 });

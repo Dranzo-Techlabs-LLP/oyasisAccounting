@@ -42,8 +42,12 @@ const initialForm = {
   customerId: "",
   packageId: "",
   departureDate: "",
+  endDate: "",
   adults: 2,
   children: 0,
+  adultPriceOverride: "",
+  childPriceOverride: "",
+  priceOverrideEnabled: false,
   discountType: "NONE",
   discountValue: 0,
   bookingStatus: "CONFIRMED",
@@ -96,6 +100,10 @@ export default function BookingForm({
         customerId: initialValues.customerId || initialValues.customer?.id || "",
         packageId: initialValues.packageId || initialValues.travelPackage?.id || "",
         departureDate: initialValues.departureDate?.slice(0, 10) || "",
+        endDate: initialValues.endDate?.slice(0, 10) || "",
+        adultPriceOverride: initialValues.adultPriceOverride ?? "",
+        childPriceOverride: initialValues.childPriceOverride ?? "",
+        priceOverrideEnabled: initialValues.adultPriceOverride != null || initialValues.childPriceOverride != null,
         extraCharges:
           initialValues.extraCharges?.length > 0 ? initialValues.extraCharges : initialForm.extraCharges,
         installments: existingPayments,
@@ -140,12 +148,32 @@ export default function BookingForm({
 
   const selectedPackage = packages.find((item) => item.id === Number(form.packageId));
 
+  // Auto-suggest end date when package + departure set and end date empty.
+  useEffect(() => {
+    if (!selectedPackage || !form.departureDate || form.endDate) return;
+    const dur = Number(selectedPackage.durationDays || 0);
+    if (dur > 0) {
+      const dep = new Date(form.departureDate);
+      const end = new Date(dep);
+      end.setDate(dep.getDate() + (dur - 1));
+      setForm((c) => ({ ...c, endDate: end.toISOString().slice(0, 10) }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.packageId, form.departureDate]);
+
+  const effectiveAdultRate = form.priceOverrideEnabled && form.adultPriceOverride !== ""
+    ? Number(form.adultPriceOverride)
+    : Number(selectedPackage?.priceAdult || 0);
+  const effectiveChildRate = form.priceOverrideEnabled && form.childPriceOverride !== ""
+    ? Number(form.childPriceOverride)
+    : Number(selectedPackage?.priceChild || 0);
+
   const liveTotals = useMemo(() => {
     if (!selectedPackage) return { total: 0, subtotal: 0, paid: 0, balance: 0, payouts: 0, margin: 0 };
     const extras = form.extraCharges.reduce((s, i) => s + Number(i.amount || 0), 0);
     const subtotal =
-      Number(selectedPackage.priceAdult) * Number(form.adults) +
-      Number(selectedPackage.priceChild) * Number(form.children) +
+      effectiveAdultRate * Number(form.adults) +
+      effectiveChildRate * Number(form.children) +
       extras;
     const discount =
       form.discountType === "FLAT"
@@ -336,6 +364,9 @@ export default function BookingForm({
           packageId: Number(form.packageId),
           adults: Number(form.adults),
           children: Number(form.children),
+          endDate: form.endDate || null,
+          adultPriceOverride: form.priceOverrideEnabled && form.adultPriceOverride !== "" ? Number(form.adultPriceOverride) : null,
+          childPriceOverride: form.priceOverrideEnabled && form.childPriceOverride !== "" ? Number(form.childPriceOverride) : null,
           discountValue: Number(form.discountValue),
           extraCharges: form.extraCharges
             .filter((item) => item.label)
@@ -384,10 +415,62 @@ export default function BookingForm({
                   <option key={item.id} value={item.id}>{item.name} - {item.destination}</option>
                 ))}
               </Select>
+              {selectedPackage && (
+                <p className="mt-1 text-xs text-[var(--text-soft)]">
+                  Default {formatCurrency(selectedPackage.priceAdult)}/adult · {formatCurrency(selectedPackage.priceChild)}/child · {selectedPackage.durationDays}D {selectedPackage.durationNights}N
+                </p>
+              )}
             </Field>
-            <Field label="Departure Date">
-              <Input type="date" value={form.departureDate} onChange={(e) => setForm((c) => ({ ...c, departureDate: e.target.value }))} required />
-            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Departure Date">
+                <Input type="date" value={form.departureDate} onChange={(e) => setForm((c) => ({ ...c, departureDate: e.target.value }))} required />
+              </Field>
+              <Field label="End Date">
+                <Input type="date" value={form.endDate} min={form.departureDate || undefined}
+                  onChange={(e) => setForm((c) => ({ ...c, endDate: e.target.value }))} />
+              </Field>
+            </div>
+          </div>
+
+          {/* Custom pricing override */}
+          <div className="rounded-md border border-[var(--line)] bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">Custom Package Pricing</p>
+                <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+                  Package prices are just estimates. Override per-booking to lock in the negotiated rate.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-[var(--text)]">
+                <input
+                  type="checkbox"
+                  checked={form.priceOverrideEnabled}
+                  onChange={(e) => setForm((c) => ({
+                    ...c,
+                    priceOverrideEnabled: e.target.checked,
+                    adultPriceOverride: e.target.checked
+                      ? (c.adultPriceOverride !== "" ? c.adultPriceOverride : (selectedPackage?.priceAdult ?? ""))
+                      : c.adultPriceOverride,
+                    childPriceOverride: e.target.checked
+                      ? (c.childPriceOverride !== "" ? c.childPriceOverride : (selectedPackage?.priceChild ?? ""))
+                      : c.childPriceOverride
+                  }))}
+                />
+                Override default pricing
+              </label>
+            </div>
+            {form.priceOverrideEnabled && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Field label={`Adult rate ${selectedPackage ? `(default ${formatCurrency(selectedPackage.priceAdult)})` : ""}`}>
+                  <Input type="number" min="0" step="0.01" value={form.adultPriceOverride}
+                    onChange={(e) => setForm((c) => ({ ...c, adultPriceOverride: e.target.value }))} />
+                </Field>
+                <Field label={`Child rate ${selectedPackage ? `(default ${formatCurrency(selectedPackage.priceChild)})` : ""}`}>
+                  <Input type="number" min="0" step="0.01" value={form.childPriceOverride}
+                    onChange={(e) => setForm((c) => ({ ...c, childPriceOverride: e.target.value }))} />
+                </Field>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

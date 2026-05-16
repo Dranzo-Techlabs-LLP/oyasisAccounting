@@ -1,3 +1,4 @@
+import "express-async-errors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -15,6 +16,9 @@ import invoiceRoutes from "./routes/invoices.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import accountsRoutes from "./routes/accounts.js";
 import ticketSalesRoutes from "./routes/ticketSales.js";
+import settingsRoutes from "./routes/settings.js";
+import usersRoutes from "./routes/users.js";
+import calendarRoutes from "./routes/calendar.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +46,9 @@ app.use("/api/invoices", requireAuth, invoiceRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
 app.use("/api/accounts", requireAuth, accountsRoutes);
 app.use("/api/ticket-sales", requireAuth, ticketSalesRoutes);
+app.use("/api/settings", requireAuth, settingsRoutes);
+app.use("/api/users", requireAuth, usersRoutes);
+app.use("/api/calendar", requireAuth, calendarRoutes);
 
 const clientDist = path.resolve(__dirname, "../../client/dist");
 if (fs.existsSync(clientDist)) {

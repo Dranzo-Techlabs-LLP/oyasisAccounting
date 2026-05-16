@@ -6,8 +6,9 @@ import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { nextTicketSaleCode } from "../utils/codeGenerators.js";
+import { nextTicketSaleCode, nextInvoiceNumber } from "../utils/codeGenerators.js";
 import { toNumber, toPlainAmount } from "../utils/formatters.js";
+import { buildTicketSaleInvoicePdf } from "../services/ticketSaleInvoicePdf.js";
 
 const router = Router();
 
@@ -317,6 +318,48 @@ router.delete("/:id/payments/:paymentId", async (req, res) => {
 
   const refreshed = await prisma.ticketSale.findUnique({ where: { id }, include: includeAll });
   res.json(serialize(refreshed));
+});
+
+// ----- Invoice -----
+router.post("/:id/invoice/generate", async (req, res) => {
+  const id = Number(req.params.id);
+  const sale = await prisma.ticketSale.findUnique({ where: { id } });
+  if (!sale) return res.status(404).json({ message: "Ticket sale not found" });
+  if (sale.invoiceNumber) {
+    return res.json({ invoiceNumber: sale.invoiceNumber, invoicedAt: sale.invoicedAt });
+  }
+  const invoiceNumber = await nextInvoiceNumber(prisma);
+  const updated = await prisma.ticketSale.update({
+    where: { id },
+    data: { invoiceNumber, invoicedAt: new Date() }
+  });
+  res.status(201).json({ invoiceNumber: updated.invoiceNumber, invoicedAt: updated.invoicedAt });
+});
+
+router.get("/:id/invoice/pdf", async (req, res) => {
+  const id = Number(req.params.id);
+  const sale = await prisma.ticketSale.findUnique({ where: { id }, include: includeAll });
+  if (!sale) return res.status(404).json({ message: "Ticket sale not found" });
+  let invoiceNumber = sale.invoiceNumber;
+  if (!invoiceNumber) {
+    invoiceNumber = await nextInvoiceNumber(prisma);
+    await prisma.ticketSale.update({ where: { id }, data: { invoiceNumber, invoicedAt: new Date() } });
+  }
+  const fresh = await prisma.ticketSale.findUnique({ where: { id }, include: includeAll });
+  const opts = {
+    showGstin: req.query.showGstin !== "0",
+    includeBank: req.query.includeBank !== "0",
+    taxRate: Number(req.query.taxRate || 0),
+    notes: req.query.notes ? String(req.query.notes) : ""
+  };
+  const pdf = await buildTicketSaleInvoicePdf(serialize(fresh), invoiceNumber, opts);
+  const inline = req.query.inline === "1";
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `${inline ? "inline" : "attachment"}; filename="${invoiceNumber}.pdf"`
+  );
+  res.send(pdf);
 });
 
 router.patch("/:id/mark-supplier-paid", async (req, res) => {

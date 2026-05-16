@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   Building2,
@@ -7,7 +7,9 @@ import {
   Car,
   CheckCircle2,
   Download,
+  Eye,
   FileText,
+  Pencil,
   IndianRupee,
   MailCheck,
   Paperclip,
@@ -27,8 +29,10 @@ import { api } from "../api/client";
 import { Button, Field, Input, Select, Textarea } from "../components/FormPrimitives";
 import Modal from "../components/Modal";
 import PaymentForm from "../components/PaymentForm";
+import BookingForm from "../components/BookingForm";
+import InvoiceOptionsModal from "../components/InvoiceOptionsModal";
 import { EmptyState, SkeletonBlock } from "../components/Feedback";
-import { downloadBlob, formatCurrency, formatDate, readBlobText } from "../utils/formatters";
+import { downloadBlob, formatCurrency, formatDate, readBlobText, viewBlobInNewTab } from "../utils/formatters";
 import StatusBadge from "../components/StatusBadge";
 
 const PAYEE_LABELS = {
@@ -68,23 +72,86 @@ const formatBytes = (n) => {
 
 export default function BookingDetailPage() {
   const { bookingId } = useParams();
+  const navigate = useNavigate();
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [travellerOpen, setTravellerOpen] = useState(false);
   const [payoutOpen, setPayoutOpen] = useState(false);
   const [ticketOpen, setTicketOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [invoiceOptsOpen, setInvoiceOptsOpen] = useState(false);
+  const [settings, setSettings] = useState(null);
+  const [customers, setCustomers] = useState([]);
+  const [packages, setPackages] = useState([]);
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef(null);
 
   const load = async () => {
     setLoading(true);
-    const response = await api.get(`/bookings/${bookingId}`);
-    setItem(response.data);
-    setLoading(false);
+    try {
+      const response = await api.get(`/bookings/${bookingId}`);
+      setItem(response.data);
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to load booking");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, [bookingId]);
+  const loadFormDeps = async () => {
+    try {
+      const [c, p, s] = await Promise.all([
+        api.get("/customers"),
+        api.get("/packages"),
+        api.get("/settings")
+      ]);
+      setCustomers(c.data.items || []);
+      setPackages(p.data.items || []);
+      setSettings(s.data);
+    } catch { /* non-fatal */ }
+  };
+
+  const buildInvoiceUrl = (opts, inline) => {
+    const params = new URLSearchParams();
+    if (inline) params.set("inline", "1");
+    if (opts.showGstin === false) params.set("showGstin", "0");
+    if (opts.includeBank === false) params.set("includeBank", "0");
+    if (opts.taxRate > 0) params.set("taxRate", String(opts.taxRate));
+    if (opts.notes) params.set("notes", opts.notes);
+    return `/invoices/${item.id}/pdf?${params.toString()}`;
+  };
+
+  const handleInvoice = async ({ action, ...opts }) => {
+    try {
+      setBusy(true);
+      await api.post(`/invoices/${item.id}/generate`);
+      const res = await api.get(buildInvoiceUrl(opts, action === "view"), { responseType: "blob" });
+      const ct = res.data?.type || "";
+      if (ct.includes("application/json") || ct.includes("text/plain")) {
+        const msg = await readBlobText(res.data); throw new Error(msg);
+      }
+      if (action === "view") viewBlobInNewTab(res.data);
+      else downloadBlob(res.data, `${item.bookingCode}-invoice.pdf`);
+      setInvoiceOptsOpen(false);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.message || e.message || "Invoice failed");
+    } finally { setBusy(false); }
+  };
+
+  useEffect(() => { load(); loadFormDeps(); }, [bookingId]);
+
+  const deleteBooking = async () => {
+    if (!window.confirm(`Delete booking ${item.bookingCode}? This removes all payments, travellers, payouts, tickets, and attachments.`)) return;
+    try {
+      await api.delete(`/bookings/${item.id}`);
+      toast.success("Booking deleted");
+      navigate("/bookings");
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Delete failed");
+    }
+  };
 
   if (loading) return <SkeletonBlock className="h-[32rem]" />;
   if (!item) return <EmptyState title="Booking not found" message="The booking may have been removed or is unavailable." />;
@@ -173,12 +240,18 @@ export default function BookingDetailPage() {
                   {item.travelPackage.name}
                 </h2>
                 <p className="mt-1 text-sm text-[var(--text-soft)]">
-                  {item.travelPackage.destination} · Departure {formatDate(item.departureDate)}
+                  {item.travelPackage.destination} · {formatDate(item.departureDate)}{item.endDate ? ` → ${formatDate(item.endDate)}` : ""}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge value={item.bookingStatus} />
                 <StatusBadge value={item.paymentStatus} />
+                <Button variant="secondary" onClick={() => setEditOpen(true)}>
+                  <Pencil className="h-4 w-4" /> Edit
+                </Button>
+                <Button variant="danger" onClick={deleteBooking}>
+                  <Trash2 className="h-4 w-4" /> Delete
+                </Button>
               </div>
             </div>
 
@@ -194,7 +267,11 @@ export default function BookingDetailPage() {
                 <p className="mt-3 text-sm text-[var(--text)]">{item.adults} adults / {item.children} children</p>
                 <p className="mt-1 text-sm text-[var(--text)]">{item.travelPackage.durationDays}D / {item.travelPackage.durationNights}N</p>
                 <p className="mt-1 text-sm text-[var(--text)]">
-                  Adult {formatCurrency(item.travelPackage.priceAdult)} · Child {formatCurrency(item.travelPackage.priceChild)}
+                  Adult {formatCurrency(item.adultPriceOverride ?? item.travelPackage.priceAdult)}
+                  {item.adultPriceOverride != null && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">CUSTOM</span>}
+                  {" · "}
+                  Child {formatCurrency(item.childPriceOverride ?? item.travelPackage.priceChild)}
+                  {item.childPriceOverride != null && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">CUSTOM</span>}
                 </p>
               </div>
             </div>
@@ -236,8 +313,8 @@ export default function BookingDetailPage() {
             <div className="mt-5 rounded-md border border-[var(--line)] bg-white p-4">
               <h3 className="text-base font-semibold text-[var(--text)]">Cost Breakdown</h3>
               <div className="mt-3 space-y-2 text-sm text-[var(--text)]">
-                <div className="flex justify-between"><span>Adult fare × {item.adults}</span><span>{formatCurrency(item.travelPackage.priceAdult * item.adults)}</span></div>
-                <div className="flex justify-between"><span>Child fare × {item.children}</span><span>{formatCurrency(item.travelPackage.priceChild * item.children)}</span></div>
+                <div className="flex justify-between"><span>Adult fare × {item.adults}</span><span>{formatCurrency((item.adultPriceOverride ?? item.travelPackage.priceAdult) * item.adults)}</span></div>
+                <div className="flex justify-between"><span>Child fare × {item.children}</span><span>{formatCurrency((item.childPriceOverride ?? item.travelPackage.priceChild) * item.children)}</span></div>
                 {(item.extraCharges || []).map((c, i) => (
                   <div key={i} className="flex justify-between"><span>{c.label}</span><span>{formatCurrency(c.amount)}</span></div>
                 ))}
@@ -397,19 +474,8 @@ export default function BookingDetailPage() {
               <Button onClick={() => setPaymentOpen(true)}>
                 <Plus className="h-4 w-4" /> Add Payment
               </Button>
-              <Button variant="secondary" onClick={async () => {
-                try {
-                  await api.post(`/invoices/${item.id}/generate`);
-                  const response = await api.get(`/invoices/${item.id}/pdf`, { responseType: "blob" });
-                  const ct = response.data?.type || "";
-                  if (ct.includes("application/json") || ct.includes("text/plain")) {
-                    const msg = await readBlobText(response.data); throw new Error(msg);
-                  }
-                  downloadBlob(response.data, `${item.bookingCode}-invoice.pdf`);
-                  toast.success("Invoice downloaded"); load();
-                } catch (e) { toast.error(e.response?.data?.message || e.message || "Unable to generate invoice"); }
-              }}>
-                <Download className="h-4 w-4" /> Invoice PDF
+              <Button variant="secondary" onClick={() => setInvoiceOptsOpen(true)}>
+                <FileText className="h-4 w-4" /> Invoice
               </Button>
               {item.invoice && (
                 <Button variant="secondary" onClick={async () => {
@@ -509,6 +575,51 @@ export default function BookingDetailPage() {
       </div>
 
       {/* Add Payment */}
+      {/* Invoice Options */}
+      <InvoiceOptionsModal
+        open={invoiceOptsOpen}
+        onClose={() => setInvoiceOptsOpen(false)}
+        settings={settings}
+        busy={busy}
+        onConfirm={handleInvoice}
+      />
+
+      {/* Edit Booking */}
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Booking" width="max-w-5xl">
+        <BookingForm
+          customers={customers}
+          packages={packages}
+          initialValues={item}
+          busy={busy}
+          onSubmit={async (payload) => {
+            const pendingFiles = payload._pendingFiles || [];
+            const jsonPayload = { ...payload };
+            delete jsonPayload._pendingFiles;
+            try {
+              setBusy(true);
+              await api.put(`/bookings/${item.id}`, jsonPayload);
+              if (pendingFiles.length > 0) {
+                const fd = new FormData();
+                pendingFiles.forEach((f) => fd.append("files", f));
+                try {
+                  await api.post(`/bookings/${item.id}/attachments`, fd, {
+                    headers: { "Content-Type": "multipart/form-data" }
+                  });
+                  toast.success(`${pendingFiles.length} file(s) attached`);
+                } catch (e) {
+                  toast.error(e.response?.data?.message || "Save ok but upload failed");
+                }
+              }
+              toast.success("Booking updated");
+              setEditOpen(false);
+              load();
+            } catch (e) {
+              toast.error(e.response?.data?.message || "Update failed");
+            } finally { setBusy(false); }
+          }}
+        />
+      </Modal>
+
       <Modal open={paymentOpen} onClose={() => setPaymentOpen(false)} title="Add Payment" width="max-w-xl">
         <PaymentForm busy={busy} balance={balance}
           onSubmit={async (payload) => {

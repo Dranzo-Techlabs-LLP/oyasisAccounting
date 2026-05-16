@@ -101,8 +101,11 @@ const bookingSchema = z.object({
   customer: customerInlineSchema.optional(),
   packageId: z.coerce.number().int().positive(),
   departureDate: z.string(),
+  endDate: z.string().optional().nullable(),
   adults: z.coerce.number().int().min(1),
   children: z.coerce.number().int().min(0),
+  adultPriceOverride: z.union([z.coerce.number().min(0), z.null()]).optional(),
+  childPriceOverride: z.union([z.coerce.number().min(0), z.null()]).optional(),
   extraCharges: z.array(extraChargeSchema).default([]),
   discountType: z.nativeEnum(DiscountType).default("NONE"),
   discountValue: z.coerce.number().min(0).default(0),
@@ -136,6 +139,8 @@ const serializeBooking = (booking) => ({
   extraCharges: booking.extraCharges || [],
   adults: Number(booking.adults),
   children: Number(booking.children),
+  adultPriceOverride: booking.adultPriceOverride != null ? toNumber(booking.adultPriceOverride) : null,
+  childPriceOverride: booking.childPriceOverride != null ? toNumber(booking.childPriceOverride) : null,
   subtotalAmount: toNumber(booking.subtotalAmount),
   discountValue: toNumber(booking.discountValue),
   discountAmount: toNumber(booking.discountAmount),
@@ -319,9 +324,11 @@ router.post("/", async (req, res) => {
         : []);
   const paidSum = installments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
+  const effectiveAdultRate = body.adultPriceOverride != null ? body.adultPriceOverride : travelPackage.priceAdult;
+  const effectiveChildRate = body.childPriceOverride != null ? body.childPriceOverride : travelPackage.priceChild;
   const amounts = computeBookingAmounts({
-    adultRate: travelPackage.priceAdult,
-    childRate: travelPackage.priceChild,
+    adultRate: effectiveAdultRate,
+    childRate: effectiveChildRate,
     adults: body.adults,
     children: body.children,
     extraCharges: body.extraCharges,
@@ -336,8 +343,11 @@ router.post("/", async (req, res) => {
       customerId,
       packageId: body.packageId,
       departureDate: new Date(body.departureDate),
+      endDate: body.endDate ? new Date(body.endDate) : null,
       adults: body.adults,
       children: body.children,
+      adultPriceOverride: body.adultPriceOverride ?? null,
+      childPriceOverride: body.childPriceOverride ?? null,
       extraCharges: body.extraCharges,
       discountType: body.discountType,
       discountValue: body.discountValue,
@@ -413,9 +423,11 @@ router.put("/:id", async (req, res) => {
     return res.status(404).json({ message: "Booking not found" });
   }
 
+  const effectiveAdultRate = body.adultPriceOverride != null ? body.adultPriceOverride : travelPackage.priceAdult;
+  const effectiveChildRate = body.childPriceOverride != null ? body.childPriceOverride : travelPackage.priceChild;
   const amounts = computeBookingAmounts({
-    adultRate: travelPackage.priceAdult,
-    childRate: travelPackage.priceChild,
+    adultRate: effectiveAdultRate,
+    childRate: effectiveChildRate,
     adults: body.adults,
     children: body.children,
     extraCharges: body.extraCharges,
@@ -430,8 +442,11 @@ router.put("/:id", async (req, res) => {
       customerId: body.customerId || existing.customerId,
       packageId: body.packageId,
       departureDate: new Date(body.departureDate),
+      endDate: body.endDate ? new Date(body.endDate) : null,
       adults: body.adults,
       children: body.children,
+      adultPriceOverride: body.adultPriceOverride ?? null,
+      childPriceOverride: body.childPriceOverride ?? null,
       extraCharges: body.extraCharges,
       discountType: body.discountType,
       discountValue: body.discountValue,

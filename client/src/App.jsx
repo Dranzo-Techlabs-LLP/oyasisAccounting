@@ -11,19 +11,23 @@ import BookingDetailPage from "./pages/BookingDetailPage";
 import BookingsOverviewPage from "./pages/BookingsOverviewPage";
 import AccountsPage from "./pages/AccountsPage";
 import TicketSalesPage from "./pages/TicketSalesPage";
-import { FullPageLoader } from "./components/Feedback";
+import SettingsPage from "./pages/SettingsPage";
+import UsersPage from "./pages/UsersPage";
+import CalendarPage from "./pages/CalendarPage";
+import { FullPageLoader, EmptyState } from "./components/Feedback";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
+  if (loading) return <FullPageLoader label="Loading OasisGo Holidays" />;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
 
-  if (loading) {
-    return <FullPageLoader label="Loading OasisGo Holidays" />;
+function AdminOnly({ children }) {
+  const { user } = useAuth();
+  if (user?.role !== "ADMIN") {
+    return <EmptyState title="Forbidden" message="Admin role required to access this page." />;
   }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
   return children;
 }
 
@@ -48,8 +52,11 @@ export default function App() {
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/:bookingId" element={<BookingDetailPage />} />
         <Route path="overview" element={<BookingsOverviewPage />} />
+        <Route path="calendar" element={<CalendarPage />} />
         <Route path="ticket-sales" element={<TicketSalesPage />} />
         <Route path="accounts" element={<AccountsPage />} />
+        <Route path="settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />
+        <Route path="users" element={<AdminOnly><UsersPage /></AdminOnly>} />
       </Route>
     </Routes>
   );

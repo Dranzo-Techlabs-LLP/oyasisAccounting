@@ -9,6 +9,10 @@ datasource db {
 
 enum Role {
   ADMIN
+  MANAGER
+  ACCOUNTANT
+  AGENT
+  VIEWER
 }
 
 enum PackageStatus {
@@ -72,9 +76,61 @@ model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
   passwordHash String
-  role         Role     @default(ADMIN)
+  fullName     String?
+  phone        String?
+  role         Role     @default(AGENT)
+  permissions  Json?
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  auditLogs    AuditLog[]
+}
+
+model Setting {
+  id                  Int      @id @default(1)
+  businessName        String   @default("OasisGo Holidays")
+  legalName           String?
+  address             String?
+  city                String?
+  state               String?
+  country             String?
+  postalCode          String?
+  phone               String?
+  email               String?
+  website             String?
+  gstin               String?
+  pan                 String?
+  currency            String   @default("INR")
+  taxRate             Decimal  @db.Decimal(5, 2) @default(0)
+  bankName            String?
+  bankAccountName     String?
+  bankAccountNumber   String?
+  bankIfsc            String?
+  bankBranch          String?
+  upiId               String?
+  logoFileName        String?
+  invoicePrefix       String   @default("OGH")
+  invoiceNextNumber   Int      @default(1)
+  invoiceUseYear      Boolean  @default(true)
+  bookingPrefix       String   @default("BK")
+  bookingNextNumber   Int      @default(1)
+  ticketSalePrefix    String   @default("TKT")
+  ticketSaleNextNumber Int     @default(1)
+  invoiceTerms        String?
+  updatedAt           DateTime @updatedAt
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 model Package {
@@ -116,8 +172,11 @@ model Booking {
   customerId     Int
   packageId      Int
   departureDate  DateTime
+  endDate        DateTime?
   adults         Int
   children       Int
+  adultPriceOverride Decimal? @db.Decimal(10, 2)
+  childPriceOverride Decimal? @db.Decimal(10, 2)
   extraCharges   Json
   discountType   DiscountType  @default(NONE)
   discountValue  Decimal       @db.Decimal(10, 2)
@@ -184,6 +243,8 @@ model TicketSale {
   supplierName     String?
   supplierPaid     Boolean       @default(false)
   supplierPaidDate DateTime?
+  invoiceNumber    String?       @unique
+  invoicedAt       DateTime?
   note             String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { Eye, Pencil, Plus, Search, Trash2, Plane, Train, Bus, Car, Ship, Ticket } from "lucide-react";
+import { Download, Eye, FileText, Pencil, Plus, Trash2, Plane, Train, Bus, Car, Ship, Ticket } from "lucide-react";
 import { api } from "../api/client";
 import { Button, Input, Select } from "../components/FormPrimitives";
 import Modal from "../components/Modal";
 import TicketSaleForm from "../components/TicketSaleForm";
-import { EmptyState, SkeletonBlock } from "../components/Feedback";
-import { formatCurrency, formatDate } from "../utils/formatters";
+import DataTable from "../components/DataTable";
+import InvoiceOptionsModal from "../components/InvoiceOptionsModal";
+import { SkeletonBlock } from "../components/Feedback";
+import { downloadBlob, formatCurrency, formatDate, readBlobText, viewBlobInNewTab } from "../utils/formatters";
 import StatusBadge from "../components/StatusBadge";
 
 const TYPE_ICON = { FLIGHT: Plane, TRAIN: Train, BUS: Bus, CAR: Car, BOAT: Ship, FERRY: Ship, OTHER: Ticket };
@@ -20,16 +22,25 @@ export default function TicketSalesPage() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const [invoiceTarget, setInvoiceTarget] = useState(null);
+  const [settings, setSettings] = useState(null);
 
   const load = async () => {
     setLoading(true);
-    const [salesRes, customerRes] = await Promise.all([
-      api.get("/ticket-sales", { params: filters }),
-      api.get("/customers")
-    ]);
-    setItems(salesRes.data.items);
-    setCustomers(customerRes.data.items);
-    setLoading(false);
+    try {
+      const [salesRes, customerRes, settingsRes] = await Promise.all([
+        api.get("/ticket-sales"),
+        api.get("/customers"),
+        api.get("/settings")
+      ]);
+      setItems(salesRes.data.items);
+      setCustomers(customerRes.data.items);
+      setSettings(settingsRes.data);
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to load");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -44,6 +55,32 @@ export default function TicketSalesPage() {
     catch (e) { toast.error(e.response?.data?.message || "Update failed"); }
   };
 
+  const openInvoice = (sale) => setInvoiceTarget(sale);
+
+  const handleInvoice = async ({ action, showGstin, includeBank, taxRate, notes }) => {
+    if (!invoiceTarget) return;
+    const params = new URLSearchParams();
+    if (action === "view") params.set("inline", "1");
+    if (showGstin === false) params.set("showGstin", "0");
+    if (includeBank === false) params.set("includeBank", "0");
+    if (taxRate > 0) params.set("taxRate", String(taxRate));
+    if (notes) params.set("notes", notes);
+    try {
+      setBusy(true);
+      const res = await api.get(`/ticket-sales/${invoiceTarget.id}/invoice/pdf?${params.toString()}`, { responseType: "blob" });
+      const ct = res.data?.type || "";
+      if (ct.includes("application/json") || ct.includes("text/plain")) {
+        const msg = await readBlobText(res.data); throw new Error(msg);
+      }
+      if (action === "view") viewBlobInNewTab(res.data);
+      else downloadBlob(res.data, `${invoiceTarget.invoiceNumber || invoiceTarget.saleCode}-invoice.pdf`);
+      setInvoiceTarget(null);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.message || e.message || "Invoice failed");
+    } finally { setBusy(false); }
+  };
+
   return (
     <div className="grid gap-5">
       {/* KPIs */}
@@ -55,118 +92,146 @@ export default function TicketSalesPage() {
       </div>
 
       <div className="panel rounded-lg p-4">
-        <div className="grid gap-3 xl:grid-cols-[1fr_200px_220px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-3.5 h-4 w-4 text-[var(--text-soft)]" />
-            <Input className="pl-9" placeholder="Search code, PNR, vendor, customer" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--text)]">Ticket Sales</h2>
+            <p className="mt-0.5 text-xs text-[var(--text-soft)]">Search, filter, and sort standalone ticket bookings.</p>
           </div>
-          <Select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-            <option value="">All statuses</option>
-            <option value="BOOKED">Booked</option>
-            <option value="PENDING">Pending</option>
-            <option value="CANCELLED">Cancelled</option>
-          </Select>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={load} className="flex-1">Apply</Button>
-            <Button onClick={() => { setEditing(null); setOpen(true); }} className="flex-1">
-              <Plus className="h-4 w-4" /> New Sale
-            </Button>
-          </div>
+          <Button onClick={() => { setEditing(null); setOpen(true); }}>
+            <Plus className="h-4 w-4" /> New Sale
+          </Button>
         </div>
       </div>
 
       {loading ? (
         <SkeletonBlock className="h-96" />
-      ) : items.length === 0 ? (
-        <EmptyState title="No ticket sales yet" message="Standalone ticket bookings (not tied to a tour package) appear here." />
       ) : (
-        <div className="panel rounded-lg p-5">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-[var(--text-soft)]">
-                <tr>
-                  <th className="pb-3 font-medium">Sale</th>
-                  <th className="pb-3 font-medium">Customer</th>
-                  <th className="pb-3 font-medium">Route / Date</th>
-                  <th className="pb-3 font-medium">Amount</th>
-                  <th className="pb-3 font-medium">Margin</th>
-                  <th className="pb-3 font-medium">Status</th>
-                  <th className="pb-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((s) => {
+        <div className="panel rounded-lg p-4">
+          <DataTable
+            rows={items}
+            columns={[
+              {
+                key: "saleCode", label: "Sale",
+                accessor: (s) => s.saleCode,
+                filterType: "text",
+                render: (s) => {
                   const Icon = TYPE_ICON[s.ticketType] || Ticket;
                   return (
-                    <tr key={s.id} className="border-t border-[var(--line)]">
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--surface-muted)]">
-                            <Icon className="h-3.5 w-3.5 text-[var(--text-soft)]" />
-                          </span>
-                          <div>
-                            <p className="font-medium text-[var(--text)]">{s.vendor || "—"}</p>
-                            <p className="text-xs text-[var(--text-soft)]">{s.saleCode} · {s.reference || "no PNR"}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        <p className="font-medium text-[var(--text)]">{s.customer?.fullName || "—"}</p>
-                        <p className="text-xs text-[var(--text-soft)]">{s.customer?.phone}</p>
-                      </td>
-                      <td className="py-3">
-                        <p className="text-[var(--text)]">{(s.fromLocation || "?")} → {(s.toLocation || "?")}</p>
-                        <p className="text-xs text-[var(--text-soft)]">{s.departAt ? formatDate(s.departAt) : "—"}</p>
-                      </td>
-                      <td className="py-3">
-                        <p className="font-medium text-[var(--text)]">{formatCurrency(s.totalAmount)}</p>
-                        <p className="text-xs text-[var(--text-soft)]">Paid {formatCurrency(s.paidAmount)}</p>
-                      </td>
-                      <td className="py-3">
-                        <p className={`font-medium ${Number(s.margin) >= 0 ? "text-emerald-700" : "text-red-600"}`}>{formatCurrency(s.margin)}</p>
-                        <p className={`text-xs ${s.supplierPaid ? "text-emerald-700" : "text-amber-700"}`}>
-                          Supplier {s.supplierPaid ? "paid" : "unpaid"}
-                        </p>
-                      </td>
-                      <td className="py-3">
-                        <div className="flex flex-wrap gap-1">
-                          <StatusBadge value={s.status} />
-                          <StatusBadge value={s.paymentStatus} />
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        <div className="flex gap-1">
-                          <Button variant="secondary" className="w-10 px-0" onClick={() => setViewing(s)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="secondary" className="w-10 px-0" onClick={async () => {
-                            const res = await api.get(`/ticket-sales/${s.id}`);
-                            setEditing(res.data); setOpen(true);
-                          }}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          {!s.supplierPaid && (
-                            <Button variant="secondary" className="px-2 text-xs" onClick={() => markSupplierPaid(s.id)}>
-                              Pay supplier
-                            </Button>
-                          )}
-                          <Button variant="danger" className="w-10 px-0" onClick={async () => {
-                            if (!window.confirm("Delete this ticket sale?")) return;
-                            try { await api.delete(`/ticket-sales/${s.id}`); toast.success("Deleted"); load(); }
-                            catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
-                          }}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--surface-muted)]">
+                        <Icon className="h-3.5 w-3.5 text-[var(--text-soft)]" />
+                      </span>
+                      <div>
+                        <p className="font-medium text-[var(--text)]">{s.vendor || "—"}</p>
+                        <p className="text-xs text-[var(--text-soft)]">{s.saleCode} · {s.reference || "no PNR"}</p>
+                      </div>
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
+                }
+              },
+              {
+                key: "customer.fullName", label: "Customer",
+                accessor: (s) => s.customer?.fullName,
+                filterType: "text",
+                render: (s) => (
+                  <div>
+                    <p className="font-medium text-[var(--text)]">{s.customer?.fullName || "—"}</p>
+                    <p className="text-xs text-[var(--text-soft)]">{s.customer?.phone}</p>
+                  </div>
+                )
+              },
+              {
+                key: "departAt", label: "Route / Date",
+                accessor: (s) => s.departAt ? new Date(s.departAt) : null,
+                render: (s) => (
+                  <div>
+                    <p className="text-[var(--text)]">{(s.fromLocation || "?")} → {(s.toLocation || "?")}</p>
+                    <p className="text-xs text-[var(--text-soft)]">{s.departAt ? formatDate(s.departAt) : "—"}</p>
+                  </div>
+                )
+              },
+              {
+                key: "totalAmount", label: "Amount",
+                accessor: (s) => Number(s.totalAmount || 0),
+                render: (s) => (
+                  <div>
+                    <p className="font-medium text-[var(--text)]">{formatCurrency(s.totalAmount)}</p>
+                    <p className="text-xs text-[var(--text-soft)]">Paid {formatCurrency(s.paidAmount)}</p>
+                  </div>
+                )
+              },
+              {
+                key: "margin", label: "Margin",
+                accessor: (s) => Number(s.margin || 0),
+                render: (s) => (
+                  <div>
+                    <p className={`font-medium ${Number(s.margin) >= 0 ? "text-emerald-700" : "text-red-600"}`}>{formatCurrency(s.margin)}</p>
+                    <p className={`text-xs ${s.supplierPaid ? "text-emerald-700" : "text-amber-700"}`}>Supplier {s.supplierPaid ? "paid" : "unpaid"}</p>
+                  </div>
+                )
+              },
+              {
+                key: "status", label: "Status",
+                accessor: (s) => s.status,
+                filterType: "select",
+                filterOptions: [
+                  { value: "BOOKED", label: "Booked" },
+                  { value: "PENDING", label: "Pending" },
+                  { value: "CANCELLED", label: "Cancelled" }
+                ],
+                render: (s) => (
+                  <div className="flex flex-wrap gap-1">
+                    <StatusBadge value={s.status} />
+                    <StatusBadge value={s.paymentStatus} />
+                  </div>
+                )
+              },
+              {
+                key: "actions", label: "Actions", sortable: false,
+                render: (s) => (
+                  <div className="flex flex-wrap gap-1">
+                    <Button variant="secondary" className="w-10 px-0" title="Quick view" onClick={() => setViewing(s)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="secondary" className="w-10 px-0" title="Edit" onClick={async () => {
+                      const res = await api.get(`/ticket-sales/${s.id}`);
+                      setEditing(res.data); setOpen(true);
+                    }}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="secondary" className="w-10 px-0" title="Invoice options" onClick={() => openInvoice(s)}>
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                    {!s.supplierPaid && (
+                      <Button variant="secondary" className="px-2 text-xs" onClick={() => markSupplierPaid(s.id)}>
+                        Pay supplier
+                      </Button>
+                    )}
+                    <Button variant="danger" className="w-10 px-0" title="Delete" onClick={async () => {
+                      if (!window.confirm("Delete this ticket sale?")) return;
+                      try { await api.delete(`/ticket-sales/${s.id}`); toast.success("Deleted"); load(); }
+                      catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
+                    }}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )
+              }
+            ]}
+            initialSort={{ key: "saleCode", dir: "desc" }}
+            searchKeys={["saleCode", "vendor", "reference", "customer.fullName", "fromLocation", "toLocation"]}
+            emptyMessage="No ticket sales match the current filters."
+          />
         </div>
       )}
+
+      <InvoiceOptionsModal
+        open={!!invoiceTarget}
+        onClose={() => setInvoiceTarget(null)}
+        settings={settings}
+        busy={busy}
+        onConfirm={handleInvoice}
+      />
 
       <Modal open={open} onClose={() => { setOpen(false); setEditing(null); }} title={editing ? "Edit Ticket Sale" : "New Ticket Sale"} width="max-w-5xl">
         <TicketSaleForm

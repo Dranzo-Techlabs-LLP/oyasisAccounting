@@ -1,25 +1,35 @@
 import dayjs from "dayjs";
+import { getSettings, invalidateSettings } from "../lib/settings.js";
+
+const pad = (n, w = 5) => String(n).padStart(w, "0");
 
 export const nextBookingCode = async (prisma) => {
-  const count = await prisma.booking.count();
-  return `BK-${String(count + 1).padStart(5, "0")}`;
+  const s = await getSettings();
+  const prefix = s.bookingPrefix || "BK";
+  const num = s.bookingNextNumber || (await prisma.booking.count()) + 1;
+  await prisma.setting.update({ where: { id: 1 }, data: { bookingNextNumber: num + 1 } });
+  invalidateSettings();
+  return `${prefix}-${pad(num)}`;
 };
 
 export const nextTicketSaleCode = async (prisma) => {
-  const count = await prisma.ticketSale.count();
-  return `TKT-${String(count + 1).padStart(5, "0")}`;
+  const s = await getSettings();
+  const prefix = s.ticketSalePrefix || "TKT";
+  const num = s.ticketSaleNextNumber || (await prisma.ticketSale.count()) + 1;
+  await prisma.setting.update({ where: { id: 1 }, data: { ticketSaleNextNumber: num + 1 } });
+  invalidateSettings();
+  return `${prefix}-${pad(num)}`;
 };
 
 export const nextInvoiceNumber = async (prisma) => {
-  const year = dayjs().year();
-  const count = await prisma.invoice.count({
-    where: {
-      issuedDate: {
-        gte: dayjs(`${year}-01-01`).startOf("day").toDate(),
-        lte: dayjs(`${year}-12-31`).endOf("day").toDate()
-      }
-    }
-  });
-
-  return `OGH-${year}-${String(count + 1).padStart(4, "0")}`;
+  const s = await getSettings();
+  const prefix = s.invoicePrefix || "OGH";
+  const useYear = s.invoiceUseYear !== false;
+  const num = s.invoiceNextNumber || (await prisma.invoice.count()) + 1;
+  await prisma.setting.update({ where: { id: 1 }, data: { invoiceNextNumber: num + 1 } });
+  invalidateSettings();
+  if (useYear) {
+    return `${prefix}-${dayjs().year()}-${pad(num, 4)}`;
+  }
+  return `${prefix}-${pad(num, 4)}`;
 };

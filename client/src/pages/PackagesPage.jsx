@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { api } from "../api/client";
 import { Button, Input, Select } from "../components/FormPrimitives";
 import Modal from "../components/Modal";
@@ -12,17 +12,44 @@ import { formatCurrency } from "../utils/formatters";
 export default function PackagesPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ q: "", status: "" });
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortBy, setSortBy] = useState("name");
+  const [sortDir, setSortDir] = useState("asc");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const response = await api.get("/packages", { params: filters });
-    setItems(response.data.items);
-    setLoading(false);
+    try {
+      const response = await api.get("/packages");
+      setItems(response.data.items);
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to load packages");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const filtered = useMemo(() => {
+    let out = items;
+    if (query) {
+      const q = query.toLowerCase();
+      out = out.filter((p) =>
+        p.name.toLowerCase().includes(q) || (p.destination || "").toLowerCase().includes(q)
+      );
+    }
+    if (statusFilter) out = out.filter((p) => p.status === statusFilter);
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...out].sort((a, b) => {
+      const av = a[sortBy];
+      const bv = b[sortBy];
+      const an = Number(av), bn = Number(bv);
+      if (!Number.isNaN(an) && !Number.isNaN(bn) && av !== "" && bv !== "") return (an - bn) * dir;
+      return String(av || "").localeCompare(String(bv || "")) * dir;
+    });
+  }, [items, query, statusFilter, sortBy, sortDir]);
 
   useEffect(() => {
     load();
@@ -51,31 +78,35 @@ export default function PackagesPage() {
   return (
     <div className="grid gap-5">
       <div className="panel rounded-lg p-4">
-        <div className="grid gap-3 lg:grid-cols-[1fr_180px_160px]">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
             <Search className="absolute left-3 top-3.5 h-4 w-4 text-[var(--text-soft)]" />
-            <Input className="pl-9" placeholder="Search package or destination" value={filters.q} onChange={(e) => setFilters((c) => ({ ...c, q: e.target.value }))} />
+            <Input className="pl-9 pr-9" placeholder="Search package or destination" value={query} onChange={(e) => setQuery(e.target.value)} />
+            {query && (
+              <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-3 rounded-full p-1 text-[var(--text-soft)] hover:bg-[var(--surface-muted)]" aria-label="Clear">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-          <Select value={filters.status} onChange={(e) => setFilters((c) => ({ ...c, status: e.target.value }))}>
+          <Select className="w-44" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">All statuses</option>
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
           </Select>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={load} className="flex-1">
-              Apply
-            </Button>
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setOpen(true);
-              }}
-              className="flex-1"
-            >
-              <Plus className="h-4 w-4" />
-              Add
-            </Button>
-          </div>
+          <Select className="w-44" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="name">Sort: Name</option>
+            <option value="destination">Sort: Destination</option>
+            <option value="priceAdult">Sort: Adult Price</option>
+            <option value="durationDays">Sort: Duration</option>
+            <option value="maxPax">Sort: Max Pax</option>
+          </Select>
+          <Select className="w-32" value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </Select>
+          <Button onClick={() => { setEditing(null); setOpen(true); }}>
+            <Plus className="h-4 w-4" /> Add
+          </Button>
         </div>
       </div>
 
@@ -85,11 +116,11 @@ export default function PackagesPage() {
             <SkeletonBlock key={index} className="h-64" />
           ))}
         </div>
-      ) : items.length === 0 ? (
-        <EmptyState title="No packages yet" message="Create your first holiday package to start quoting and booking departures." />
+      ) : filtered.length === 0 ? (
+        <EmptyState title="No packages match" message="Try clearing search or status filter." />
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
-          {items.map((item) => (
+          {filtered.map((item) => (
             <article key={item.id} className="panel overflow-hidden rounded-lg">
               {item.coverImageUrl ? (
                 <img src={item.coverImageUrl} alt={item.name} className="h-44 w-full object-cover" />
