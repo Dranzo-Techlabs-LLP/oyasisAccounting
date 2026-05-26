@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Link as LinkIcon } from "lucide-react";
+import { toast } from "react-toastify";
 import { Button, Field, Input, Select, Textarea } from "./FormPrimitives";
 import { formatCurrency, formatDate } from "../utils/formatters";
 
@@ -126,21 +127,41 @@ export default function VendorInvoiceForm({ vendors, bookings = [], initialValue
   return (
     <form className="grid gap-4" onSubmit={(e) => {
       e.preventDefault();
-      onSubmit({
-        ...form,
-        vendorId: Number(form.vendorId),
-        issueDate: form.issueDate || todayISO(),
-        dueDate: form.dueDate || null,
-        items: form.items
-          .filter((it) => it.description && Number(it.unitPrice) >= 0)
-          .map((it, i) => ({
+      const cleanItems = form.items
+        .filter((it) => {
+          const desc = String(it.description || "").trim();
+          const unit = Number(it.unitPrice || 0);
+          const disc = Number(it.discountAmount || 0);
+          const qty = Number(it.quantity || 0);
+          // Keep a row if the user typed anything meaningful in it.
+          return Boolean(desc) || unit > 0 || disc > 0 || qty > 1;
+        })
+        .map((it, i) => {
+          const desc = String(it.description || "").trim();
+          return {
             ...it,
+            // Server requires a non-empty description on every row. Fall back so a
+            // row with a real amount but a forgotten description still saves.
+            description: desc || "Service",
             quantity: Number(it.quantity || 1),
             unitPrice: Number(it.unitPrice || 0),
             taxRate: Number(it.taxRate || 0),
             discountAmount: Number(it.discountAmount || 0),
             position: i
-          }))
+          };
+        });
+
+      if (cleanItems.length === 0) {
+        toast.error("Add at least one line item — set a description or an amount before creating the invoice.");
+        return;
+      }
+
+      onSubmit({
+        ...form,
+        vendorId: Number(form.vendorId),
+        issueDate: form.issueDate || todayISO(),
+        dueDate: form.dueDate || null,
+        items: cleanItems
       });
     }}>
       <div className="grid gap-3 sm:grid-cols-2">
