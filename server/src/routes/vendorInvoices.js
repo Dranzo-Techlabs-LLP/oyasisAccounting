@@ -5,13 +5,14 @@ import { prisma } from "../lib/prisma.js";
 import { nextVendorInvoiceNumber } from "../utils/codeGenerators.js";
 import { toNumber, toPlainAmount } from "../utils/formatters.js";
 import { buildVendorInvoicePdf } from "../services/vendorInvoicePdf.js";
+import { optionalString, optionalDateString } from "../utils/zodHelpers.js";
 
 const router = Router();
 
 const itemSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   description: z.string().min(1),
-  hsnCode: z.string().optional().nullable(),
+  hsnCode: optionalString,
   quantity: z.coerce.number().min(0).default(1),
   unitPrice: z.coerce.number().min(0),
   taxRate: z.coerce.number().min(0).max(100).default(0),
@@ -20,13 +21,13 @@ const itemSchema = z.object({
 
 const invoiceSchema = z.object({
   vendorId: z.coerce.number().int().positive(),
-  issueDate: z.string().optional(),
-  dueDate: z.string().optional().nullable(),
+  issueDate: optionalDateString,
+  dueDate: optionalDateString,
   status: z.nativeEnum(VendorInvoiceStatus).default("DRAFT"),
-  currency: z.string().optional(),
-  notes: z.string().optional().nullable(),
-  terms: z.string().optional().nullable(),
-  reference: z.string().optional().nullable(),
+  currency: optionalString,
+  notes: optionalString,
+  terms: optionalString,
+  reference: optionalString,
   showGstin: z.boolean().optional().default(true),
   includeBank: z.boolean().optional().default(true),
   items: z.array(itemSchema).min(1)
@@ -34,10 +35,10 @@ const invoiceSchema = z.object({
 
 const paymentSchema = z.object({
   amount: z.coerce.number().positive(),
-  paymentDate: z.string().optional(),
-  paymentMethod: z.string().optional().nullable(),
-  reference: z.string().optional().nullable(),
-  notes: z.string().optional().nullable()
+  paymentDate: optionalDateString,
+  paymentMethod: optionalString,
+  reference: optionalString,
+  notes: optionalString
 });
 
 const include = {

@@ -5,18 +5,19 @@ import { stringify } from "csv-stringify/sync";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { toNumber } from "../utils/formatters.js";
+import { optionalString, optionalDateString } from "../utils/zodHelpers.js";
 
 const router = Router();
 
 const entrySchema = z.object({
   kind: z.nativeEnum(LedgerKind),
   category: z.string().min(1),
-  party: z.string().optional().nullable(),
+  party: optionalString,
   amount: z.coerce.number().positive(),
-  txDate: z.string().optional(),
-  paymentMethod: z.string().optional().nullable(),
-  reference: z.string().optional().nullable(),
-  notes: z.string().optional().nullable()
+  txDate: optionalDateString,
+  paymentMethod: optionalString,
+  reference: optionalString,
+  notes: optionalString
 });
 
 const serialize = (e) => ({ ...e, amount: toNumber(e.amount) });

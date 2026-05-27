@@ -31,29 +31,31 @@ const upload = multer({
   }
 });
 
+import { optionalString, optionalEmail } from "../utils/zodHelpers.js";
+
 const numericStr = z.union([z.coerce.number(), z.string(), z.null()]).optional();
 
 const settingsSchema = z.object({
   businessName: z.string().min(1).optional(),
-  legalName: z.string().optional().nullable(),
-  address: z.string().optional().nullable(),
-  city: z.string().optional().nullable(),
-  state: z.string().optional().nullable(),
-  country: z.string().optional().nullable(),
-  postalCode: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
-  email: z.string().email().or(z.literal("")).optional().nullable(),
-  website: z.string().optional().nullable(),
-  gstin: z.string().optional().nullable(),
-  pan: z.string().optional().nullable(),
-  currency: z.string().optional(),
+  legalName: optionalString,
+  address: optionalString,
+  city: optionalString,
+  state: optionalString,
+  country: optionalString,
+  postalCode: optionalString,
+  phone: optionalString,
+  email: optionalEmail,
+  website: optionalString,
+  gstin: optionalString,
+  pan: optionalString,
+  currency: optionalString,
   taxRate: z.coerce.number().min(0).max(100).optional(),
-  bankName: z.string().optional().nullable(),
-  bankAccountName: z.string().optional().nullable(),
-  bankAccountNumber: z.string().optional().nullable(),
-  bankIfsc: z.string().optional().nullable(),
-  bankBranch: z.string().optional().nullable(),
-  upiId: z.string().optional().nullable(),
+  bankName: optionalString,
+  bankAccountName: optionalString,
+  bankAccountNumber: optionalString,
+  bankIfsc: optionalString,
+  bankBranch: optionalString,
+  upiId: optionalString,
   invoicePrefix: z.string().min(1).optional(),
   invoiceNextNumber: z.coerce.number().int().min(1).optional(),
   invoiceUseYear: z.boolean().optional(),
@@ -64,7 +66,7 @@ const settingsSchema = z.object({
   vendorInvoicePrefix: z.string().min(1).optional(),
   vendorInvoiceNextNumber: z.coerce.number().int().min(1).optional(),
   vendorInvoiceUseYear: z.boolean().optional(),
-  invoiceTerms: z.string().optional().nullable()
+  invoiceTerms: optionalString
 });
 
 router.get("/", async (_req, res) => {

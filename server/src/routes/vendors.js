@@ -3,24 +3,25 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { toNumber } from "../utils/formatters.js";
+import { optionalString, optionalEmail } from "../utils/zodHelpers.js";
 
 const router = Router();
 
 const vendorSchema = z.object({
   name: z.string().min(1),
   type: z.nativeEnum(VendorType).default("B2B"),
-  contactName: z.string().optional().nullable(),
-  email: z.string().email().or(z.literal("")).optional().nullable(),
-  phone: z.string().optional().nullable(),
-  address: z.string().optional().nullable(),
-  city: z.string().optional().nullable(),
-  state: z.string().optional().nullable(),
-  country: z.string().optional().nullable(),
-  postalCode: z.string().optional().nullable(),
-  gstin: z.string().optional().nullable(),
-  pan: z.string().optional().nullable(),
+  contactName: optionalString,
+  email: optionalEmail,
+  phone: optionalString,
+  address: optionalString,
+  city: optionalString,
+  state: optionalString,
+  country: optionalString,
+  postalCode: optionalString,
+  gstin: optionalString,
+  pan: optionalString,
   openingBalance: z.coerce.number().default(0),
-  notes: z.string().optional().nullable(),
+  notes: optionalString,
   isActive: z.boolean().optional().default(true)
 });
 

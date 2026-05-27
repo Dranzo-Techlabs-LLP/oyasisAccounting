@@ -9,6 +9,7 @@ import { prisma } from "../lib/prisma.js";
 import { nextTicketSaleCode, nextInvoiceNumber } from "../utils/codeGenerators.js";
 import { toNumber, toPlainAmount } from "../utils/formatters.js";
 import { buildTicketSaleInvoicePdf } from "../services/ticketSaleInvoicePdf.js";
+import { optionalString, optionalEmail, optionalDateString } from "../utils/zodHelpers.js";
 
 const router = Router();
 
@@ -35,40 +36,40 @@ const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 const customerInlineSchema = z.object({
   fullName: z.string().min(2),
   phone: z.string().min(6),
-  email: z.string().email().or(z.literal("")).optional(),
-  nationality: z.string().optional(),
-  passportNo: z.string().optional(),
-  address: z.string().optional(),
-  notes: z.string().optional()
+  email: optionalEmail,
+  nationality: optionalString,
+  passportNo: optionalString,
+  address: optionalString,
+  notes: optionalString
 });
 
 const paymentInputSchema = z.object({
   amount: z.coerce.number().positive(),
   paymentDate: z.string(),
   method: z.string().min(1).default("Cash"),
-  note: z.string().optional()
+  note: optionalString
 });
 
 const ticketSaleSchema = z.object({
   customerId: z.coerce.number().int().positive().optional(),
   customer: customerInlineSchema.optional(),
   ticketType: z.nativeEnum(TicketType).default("FLIGHT"),
-  vendor: z.string().optional().nullable(),
-  reference: z.string().optional().nullable(),
-  fromLocation: z.string().optional().nullable(),
-  toLocation: z.string().optional().nullable(),
-  departAt: z.string().optional().nullable(),
-  returnAt: z.string().optional().nullable(),
+  vendor: optionalString,
+  reference: optionalString,
+  fromLocation: optionalString,
+  toLocation: optionalString,
+  departAt: optionalDateString,
+  returnAt: optionalDateString,
   passengers: z.coerce.number().int().min(1).default(1),
   costPrice: z.coerce.number().min(0).default(0),
   sellingPrice: z.coerce.number().min(0),
   serviceFee: z.coerce.number().min(0).default(0),
   discountAmount: z.coerce.number().min(0).default(0),
   status: z.nativeEnum(TicketStatus).default("BOOKED"),
-  supplierName: z.string().optional().nullable(),
+  supplierName: optionalString,
   supplierPaid: z.boolean().optional().default(false),
-  supplierPaidDate: z.string().optional().nullable(),
-  note: z.string().optional().nullable(),
+  supplierPaidDate: optionalDateString,
+  note: optionalString,
   payments: z.array(paymentInputSchema).optional()
 });
 

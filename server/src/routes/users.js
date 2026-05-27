@@ -4,14 +4,15 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../middleware/auth.js";
+import { optionalString } from "../utils/zodHelpers.js";
 
 const router = Router();
 
 const userCreateSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
-  fullName: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
+  fullName: optionalString,
+  phone: optionalString,
   role: z.nativeEnum(Role).default("AGENT"),
   permissions: z.record(z.any()).optional(),
   isActive: z.boolean().optional().default(true)
@@ -20,8 +21,8 @@ const userCreateSchema = z.object({
 const userUpdateSchema = z.object({
   email: z.string().email().optional(),
   password: z.string().min(6).optional().or(z.literal("").transform(() => undefined)),
-  fullName: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
+  fullName: optionalString,
+  phone: optionalString,
   role: z.nativeEnum(Role).optional(),
   permissions: z.record(z.any()).optional().nullable(),
   isActive: z.boolean().optional()

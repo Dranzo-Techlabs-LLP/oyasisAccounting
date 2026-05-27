@@ -10,6 +10,7 @@ import { prisma } from "../lib/prisma.js";
 import { computeBookingAmounts } from "../utils/bookingMath.js";
 import { nextBookingCode } from "../utils/codeGenerators.js";
 import { toNumber } from "../utils/formatters.js";
+import { optionalString, optionalEmail, optionalDateString } from "../utils/zodHelpers.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,29 +45,29 @@ const extraChargeSchema = z.object({
 const customerInlineSchema = z.object({
   fullName: z.string().min(2),
   phone: z.string().min(6),
-  email: z.string().email().or(z.literal("")).optional(),
-  nationality: z.string().optional(),
-  passportNo: z.string().optional(),
-  address: z.string().optional(),
-  notes: z.string().optional()
+  email: optionalEmail,
+  nationality: optionalString,
+  passportNo: optionalString,
+  address: optionalString,
+  notes: optionalString
 });
 
 const paymentInputSchema = z.object({
   amount: z.coerce.number().positive(),
   paymentDate: z.string(),
   method: z.string().min(1).default("Cash"),
-  note: z.string().optional()
+  note: optionalString
 });
 
 const travellerSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   fullName: z.string().min(1),
   age: z.coerce.number().int().min(0).max(120).optional().nullable(),
-  gender: z.string().optional().nullable(),
-  passportNo: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
+  gender: optionalString,
+  passportNo: optionalString,
+  phone: optionalString,
   isPrimary: z.boolean().optional().default(false),
-  note: z.string().optional().nullable()
+  note: optionalString
 });
 
 const payoutSchema = z.object({
@@ -75,25 +76,25 @@ const payoutSchema = z.object({
   payeeName: z.string().min(1),
   amount: z.coerce.number().min(0),
   status: z.nativeEnum(PayoutStatus).default("PENDING"),
-  dueDate: z.string().optional().nullable(),
-  paidDate: z.string().optional().nullable(),
-  reference: z.string().optional().nullable(),
-  note: z.string().optional().nullable()
+  dueDate: optionalDateString,
+  paidDate: optionalDateString,
+  reference: optionalString,
+  note: optionalString
 });
 
 const ticketSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   ticketType: z.nativeEnum(TicketType).default("FLIGHT"),
-  vendor: z.string().optional().nullable(),
-  reference: z.string().optional().nullable(),
-  fromLocation: z.string().optional().nullable(),
-  toLocation: z.string().optional().nullable(),
-  departAt: z.string().optional().nullable(),
-  returnAt: z.string().optional().nullable(),
+  vendor: optionalString,
+  reference: optionalString,
+  fromLocation: optionalString,
+  toLocation: optionalString,
+  departAt: optionalDateString,
+  returnAt: optionalDateString,
   passengers: z.coerce.number().int().min(0).default(1),
   amount: z.coerce.number().min(0).default(0),
   status: z.nativeEnum(TicketStatus).default("BOOKED"),
-  note: z.string().optional().nullable()
+  note: optionalString
 });
 
 const bookingSchema = z.object({
@@ -101,7 +102,7 @@ const bookingSchema = z.object({
   customer: customerInlineSchema.optional(),
   packageId: z.coerce.number().int().positive(),
   departureDate: z.string(),
-  endDate: z.string().optional().nullable(),
+  endDate: optionalDateString,
   adults: z.coerce.number().int().min(1),
   children: z.coerce.number().int().min(0),
   adultPriceOverride: z.union([z.coerce.number().min(0), z.null()]).optional(),
@@ -116,7 +117,7 @@ const bookingSchema = z.object({
   payouts: z.array(payoutSchema).optional(),
   tickets: z.array(ticketSchema).optional(),
   bookingStatus: z.nativeEnum(BookingStatus),
-  notes: z.string().optional()
+  notes: optionalString
 });
 
 const paymentSchema = paymentInputSchema.extend({
