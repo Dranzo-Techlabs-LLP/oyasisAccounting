@@ -15,7 +15,20 @@ export default function CustomerForm({ initialValues, onSubmit, busy }) {
   const [form, setForm] = useState(defaults);
 
   useEffect(() => {
-    setForm(initialValues ? { ...defaults, ...initialValues } : defaults);
+    if (!initialValues) {
+      setForm(defaults);
+      return;
+    }
+    // The API stores blank optional fields as `null` in MySQL. Coerce them
+    // back to "" so (a) the inputs stay controlled and (b) the submit doesn't
+    // send `null` (the server's Zod schema only accepts string | undefined).
+    const cleaned = Object.fromEntries(
+      Object.keys(defaults).map((k) => {
+        const v = initialValues[k];
+        return [k, v == null ? "" : v];
+      })
+    );
+    setForm({ ...defaults, ...cleaned });
   }, [initialValues]);
 
   const setValue = (key, value) => setForm((current) => ({ ...current, [key]: value }));

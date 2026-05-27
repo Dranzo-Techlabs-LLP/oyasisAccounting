@@ -5,14 +5,27 @@ import { toNumber } from "../utils/formatters.js";
 
 const router = Router();
 
+// Optional text fields may arrive as "" (form default), undefined (omitted),
+// or null (what MySQL returns for blank columns and what some older clients
+// send back unchanged). Treat all three the same — empty.
+const optionalString = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((v) => (v == null ? "" : v));
+
+const optionalEmail = z
+  .union([z.string().email(), z.literal(""), z.null()])
+  .optional()
+  .transform((v) => (v == null ? "" : v));
+
 const customerSchema = z.object({
   fullName: z.string().min(2),
   phone: z.string().min(6),
-  email: z.string().email().or(z.literal("")).optional(),
-  nationality: z.string().optional(),
-  passportNo: z.string().optional(),
-  address: z.string().optional(),
-  notes: z.string().optional()
+  email: optionalEmail,
+  nationality: optionalString,
+  passportNo: optionalString,
+  address: optionalString,
+  notes: optionalString
 });
 
 router.get("/", async (req, res) => {
