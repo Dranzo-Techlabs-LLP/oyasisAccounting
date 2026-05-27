@@ -91,8 +91,7 @@ export default function BookingForm({
         amount: p.amount,
         paymentDate: p.paymentDate ? String(p.paymentDate).slice(0, 10) : todayISO(),
         method: p.method || "Cash",
-        note: p.note || "",
-        locked: true
+        note: p.note || ""
       }));
       setForm({
         ...initialForm,
@@ -110,14 +109,14 @@ export default function BookingForm({
         travellers: (initialValues.travellers || []).map((t) => ({
           id: t.id, fullName: t.fullName || "", age: t.age ?? "", gender: t.gender || "",
           passportNo: t.passportNo || "", phone: t.phone || "", isPrimary: !!t.isPrimary,
-          note: t.note || "", locked: true
+          note: t.note || ""
         })),
         payouts: (initialValues.payouts || []).map((p) => ({
           id: p.id, payeeType: p.payeeType, payeeName: p.payeeName,
           amount: p.amount, status: p.status,
           dueDate: p.dueDate ? String(p.dueDate).slice(0, 10) : "",
           paidDate: p.paidDate ? String(p.paidDate).slice(0, 10) : "",
-          reference: p.reference || "", note: p.note || "", locked: true
+          reference: p.reference || "", note: p.note || ""
         })),
         tickets: (initialValues.tickets || []).map((t) => ({
           id: t.id,
@@ -131,8 +130,7 @@ export default function BookingForm({
           passengers: t.passengers ?? 1,
           amount: t.amount || 0,
           status: t.status || "BOOKED",
-          note: t.note || "",
-          locked: true
+          note: t.note || ""
         }))
       });
       setExistingAttachments(initialValues.attachments || []);
@@ -311,18 +309,19 @@ export default function BookingForm({
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
-        const newPayments = form.installments
-          .filter((p) => !p.locked)
+        const allPayments = form.installments
           .map((p) => ({
+            ...(p.id ? { id: p.id } : {}),
             amount: Number(p.amount || 0),
             paymentDate: p.paymentDate || todayISO(),
             method: p.method || "Cash",
             note: p.note || ""
           }))
           .filter((p) => p.amount > 0);
-        const newTravellers = form.travellers
-          .filter((t) => !t.locked && t.fullName.trim())
+        const allTravellers = form.travellers
+          .filter((t) => t.fullName.trim())
           .map((t) => ({
+            ...(t.id ? { id: t.id } : {}),
             fullName: t.fullName.trim(),
             age: t.age === "" ? null : Number(t.age),
             gender: t.gender || null,
@@ -331,9 +330,10 @@ export default function BookingForm({
             isPrimary: !!t.isPrimary,
             note: t.note || null
           }));
-        const newPayouts = form.payouts
-          .filter((p) => !p.locked && p.payeeName.trim())
+        const allPayouts = form.payouts
+          .filter((p) => p.payeeName.trim())
           .map((p) => ({
+            ...(p.id ? { id: p.id } : {}),
             payeeType: p.payeeType || "OTHER",
             payeeName: p.payeeName.trim(),
             amount: Number(p.amount || 0),
@@ -343,9 +343,10 @@ export default function BookingForm({
             reference: p.reference || null,
             note: p.note || null
           }));
-        const newTickets = form.tickets
-          .filter((t) => !t.locked && (t.vendor || t.reference || t.fromLocation || t.toLocation))
+        const allTickets = form.tickets
+          .filter((t) => t.vendor || t.reference || t.fromLocation || t.toLocation)
           .map((t) => ({
+            ...(t.id ? { id: t.id } : {}),
             ticketType: t.ticketType || "FLIGHT",
             vendor: t.vendor || null,
             reference: t.reference || null,
@@ -371,11 +372,11 @@ export default function BookingForm({
           extraCharges: form.extraCharges
             .filter((item) => item.label)
             .map((item) => ({ ...item, amount: Number(item.amount || 0) })),
-          payments: newPayments,
-          travellers: newTravellers,
-          payouts: newPayouts,
-          tickets: newTickets,
-          amountPaid: newPayments.reduce((sum, p) => sum + p.amount, 0)
+          payments: allPayments,
+          travellers: allTravellers,
+          payouts: allPayouts,
+          tickets: allTickets,
+          amountPaid: allPayments.reduce((sum, p) => sum + p.amount, 0)
         };
         delete payload.installments;
         // Files travel out-of-band — caller uploads them after booking is created/updated.
@@ -592,9 +593,6 @@ export default function BookingForm({
               ))}
             </div>
           )}
-          {isEdit && (
-            <p className="mt-3 text-xs text-[var(--text-soft)]">Existing travellers are read-only here. Use the booking detail page to edit them.</p>
-          )}
         </div>
       )}
 
@@ -688,9 +686,6 @@ export default function BookingForm({
               ))}
             </div>
           )}
-          {isEdit && (
-            <p className="mt-3 text-xs text-[var(--text-soft)]">Existing payouts are read-only here. Use the booking detail page to edit them.</p>
-          )}
         </div>
       )}
 
@@ -747,9 +742,6 @@ export default function BookingForm({
                 </div>
               ))}
             </div>
-          )}
-          {isEdit && (
-            <p className="mt-3 text-xs text-[var(--text-soft)]">Existing tickets are read-only here. Manage from booking detail page.</p>
           )}
         </div>
       )}

@@ -496,14 +496,21 @@ export async function mockRequest(method, url, config = {}) {
           : 0;
     const totalAmount = Math.max(subtotalAmount - discountAmount, 0);
     const paidAmount = Number(payload.amountPaid || 0);
+    const nextBookingId = state.bookings.length + 1;
+    let travellerIdSeq = 0;
+    let payoutIdSeq = 0;
+    let ticketIdSeq = 0;
     const nextBooking = {
-      id: state.bookings.length + 1,
-      bookingCode: `BK-${String(state.bookings.length + 1).padStart(5, "0")}`,
+      id: nextBookingId,
+      bookingCode: `BK-${String(nextBookingId).padStart(5, "0")}`,
       customerId,
       packageId: payload.packageId,
       departureDate: new Date(payload.departureDate).toISOString(),
+      endDate: payload.endDate ? new Date(payload.endDate).toISOString() : null,
       adults: payload.adults,
       children: payload.children,
+      adultPriceOverride: payload.adultPriceOverride ?? null,
+      childPriceOverride: payload.childPriceOverride ?? null,
       extraCharges: payload.extraCharges || [],
       discountType: payload.discountType,
       discountValue: payload.discountValue,
@@ -515,10 +522,60 @@ export async function mockRequest(method, url, config = {}) {
       paymentStatus: paidAmount === 0 ? "PENDING" : paidAmount >= totalAmount ? "PAID" : "PARTIAL",
       bookingStatus: payload.bookingStatus,
       notes: payload.notes,
+      travellers: (Array.isArray(payload.travellers) ? payload.travellers : []).map((t) => ({
+        id: ++travellerIdSeq,
+        fullName: t.fullName,
+        age: t.age ?? null,
+        gender: t.gender ?? null,
+        passportNo: t.passportNo ?? null,
+        phone: t.phone ?? null,
+        isPrimary: !!t.isPrimary,
+        note: t.note ?? null
+      })),
+      payouts: (Array.isArray(payload.payouts) ? payload.payouts : []).map((p) => ({
+        id: ++payoutIdSeq,
+        payeeType: p.payeeType || "OTHER",
+        payeeName: p.payeeName,
+        amount: Number(p.amount || 0),
+        status: p.status || "PENDING",
+        dueDate: p.dueDate || null,
+        paidDate: p.paidDate || null,
+        reference: p.reference || null,
+        note: p.note || null
+      })),
+      tickets: (Array.isArray(payload.tickets) ? payload.tickets : []).map((t) => ({
+        id: ++ticketIdSeq,
+        ticketType: t.ticketType || "FLIGHT",
+        vendor: t.vendor || null,
+        reference: t.reference || null,
+        fromLocation: t.fromLocation || null,
+        toLocation: t.toLocation || null,
+        departAt: t.departAt || null,
+        returnAt: t.returnAt || null,
+        passengers: Number(t.passengers || 1),
+        amount: Number(t.amount || 0),
+        status: t.status || "BOOKED",
+        note: t.note || null
+      })),
+      attachments: [],
       createdAt: new Date().toISOString()
     };
     state.bookings.unshift(nextBooking);
-    if (paidAmount > 0) {
+    // Persist each installment so the Edit modal can round-trip them. Falls
+    // back to a single consolidated record if the caller only sent amountPaid.
+    const incomingPayments = Array.isArray(payload.payments) ? payload.payments.filter((p) => Number(p.amount || 0) > 0) : [];
+    if (incomingPayments.length > 0) {
+      incomingPayments.forEach((p) => {
+        state.payments.unshift({
+          id: state.payments.length + 1,
+          bookingId: nextBooking.id,
+          amount: Number(p.amount || 0),
+          paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString() : new Date().toISOString(),
+          method: p.method || "Cash",
+          note: p.note || ""
+        });
+      });
+    } else if (paidAmount > 0) {
       state.payments.unshift({
         id: state.payments.length + 1,
         bookingId: nextBooking.id,
@@ -569,36 +626,52 @@ export async function mockRequest(method, url, config = {}) {
           : 0;
     const totalAmount = Math.max(subtotalAmount - Math.min(discountAmount, subtotalAmount), 0);
 
-    // Apply any "new" installments that came along with the edit
-    const newInstallments = Array.isArray(payload.payments) ? payload.payments : [];
-    let addedPaid = 0;
-    for (const p of newInstallments) {
-      const amount = Number(p.amount || 0);
-      if (amount <= 0) continue;
-      addedPaid += amount;
-      state.payments.unshift({
-        id: state.payments.length + 1,
-        bookingId: id,
-        amount,
-        paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString() : new Date().toISOString(),
-        method: p.method || "Cash",
-        note: p.note || ""
-      });
+    // Reconcile installments. The form now sends the full list (existing rows
+    // carry their `id`, new rows omit it). We replace this booking's records
+    // accordingly so edits / deletes round-trip and totals recompute correctly.
+    let paidFromPayments = null;
+    if (Array.isArray(payload.payments)) {
+      const submitted = payload.payments.filter((p) => Number(p.amount || 0) > 0);
+      const existingIds = new Set(
+        submitted.map((p) => Number(p.id)).filter((x) => Number.isFinite(x) && x > 0)
+      );
+      // Drop this booking's payments that the form no longer includes.
+      state.payments = state.payments.filter(
+        (rec) => rec.bookingId !== id || existingIds.has(Number(rec.id))
+      );
+      let nextId = state.payments.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0);
+      paidFromPayments = 0;
+      for (const p of submitted) {
+        const amount = Number(p.amount || 0);
+        paidFromPayments += amount;
+        const recordId = Number(p.id) || ++nextId;
+        const normalized = {
+          id: recordId,
+          bookingId: id,
+          amount,
+          paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString() : new Date().toISOString(),
+          method: p.method || "Cash",
+          note: p.note || ""
+        };
+        const idx = state.payments.findIndex((rec) => Number(rec.id) === recordId && rec.bookingId === id);
+        if (idx === -1) state.payments.unshift(normalized);
+        else state.payments[idx] = normalized;
+      }
     }
 
-    // Append new travellers / payouts / tickets if provided
-    const appendList = (key, items, factory) => {
-      if (!Array.isArray(items) || items.length === 0) return;
+    // Replace sub-arrays with the payload (preserving ids on rows that had them).
+    // If `payload.<key>` is undefined, leave the existing list untouched (back-compat).
+    const replaceList = (key, items, normalize) => {
+      if (!Array.isArray(items)) return;
       const arr = Array.isArray(existing[key]) ? existing[key] : [];
       let nextId = arr.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0);
-      for (const it of items) {
-        nextId += 1;
-        arr.unshift(factory({ ...it, id: nextId }));
-      }
-      existing[key] = arr;
+      const next = items.map((it) => {
+        const id = Number(it?.id) || ++nextId;
+        return { ...normalize(it), id };
+      });
+      existing[key] = next;
     };
-    appendList("travellers", payload.travellers, (t) => ({
-      id: t.id,
+    replaceList("travellers", payload.travellers, (t) => ({
       fullName: t.fullName,
       age: t.age ?? null,
       gender: t.gender ?? null,
@@ -607,8 +680,7 @@ export async function mockRequest(method, url, config = {}) {
       isPrimary: !!t.isPrimary,
       note: t.note ?? null
     }));
-    appendList("payouts", payload.payouts, (p) => ({
-      id: p.id,
+    replaceList("payouts", payload.payouts, (p) => ({
       payeeType: p.payeeType || "OTHER",
       payeeName: p.payeeName,
       amount: Number(p.amount || 0),
@@ -618,8 +690,7 @@ export async function mockRequest(method, url, config = {}) {
       reference: p.reference || null,
       note: p.note || null
     }));
-    appendList("tickets", payload.tickets, (t) => ({
-      id: t.id,
+    replaceList("tickets", payload.tickets, (t) => ({
       ticketType: t.ticketType || "FLIGHT",
       vendor: t.vendor || null,
       reference: t.reference || null,
@@ -633,7 +704,10 @@ export async function mockRequest(method, url, config = {}) {
       note: t.note || null
     }));
 
-    const paidAmount = Number(existing.paidAmount || 0) + addedPaid;
+    const paidAmount =
+      paidFromPayments != null
+        ? paidFromPayments
+        : Number(existing.paidAmount || 0);
     const updated = {
       ...existing,
       customerId: Number(payload.customerId || existing.customerId),
