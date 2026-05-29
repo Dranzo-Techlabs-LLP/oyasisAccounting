@@ -67,49 +67,71 @@ export const readBlobText = async (blob) => {
   return blob.text();
 };
 
-// Verify that what came back from a /pdf endpoint is actually a PDF, not an
-// HTML/JSON error response. Saving a non-PDF blob as `.pdf` produces a file
-// the user cannot open. Returns { ok: true } if the blob looks like a PDF,
-// or { ok: false, message } with the parsed server error otherwise.
+// Inspect the blob returned by an invoice endpoint and decide how to render it.
+// Returns one of:
+//   { ok: true,  kind: "pdf"  }  — real PDF, view inline / download as .pdf.
+//   { ok: true,  kind: "html" }  — HTML invoice preview (demo mode / fallback),
+//                                  best opened in a new tab so the user can use
+//                                  the browser's Print → Save as PDF flow.
+//   { ok: false, message }       — server returned a JSON / text error; surface
+//                                  it as a toast instead of saving garbage as .pdf.
 export const verifyPdfBlob = async (blob) => {
   if (!(blob instanceof Blob)) {
     return { ok: false, message: "Server returned unexpected data" };
   }
   const ct = (blob.type || "").toLowerCase();
-  if (ct.includes("application/json") || ct.includes("text/plain") || ct.includes("text/html")) {
-    let message = "Server returned an error instead of a PDF";
+
+  // JSON error from the API.
+  if (ct.includes("application/json")) {
     try {
       const text = await blob.text();
-      // Try JSON first, then fall back to stripped HTML / raw text.
       try {
         const parsed = JSON.parse(text);
-        message = parsed?.message || parsed?.error || text;
+        return { ok: false, message: parsed?.message || parsed?.error || "Server returned an error" };
       } catch {
-        message = text.replace(/<[^>]+>/g, " ").trim() || message;
+        return { ok: false, message: text || "Server returned an error" };
       }
-    } catch { /* ignore */ }
-    return { ok: false, message };
+    } catch {
+      return { ok: false, message: "Server returned an error" };
+    }
   }
-  // Inspect the first 4 bytes — every valid PDF starts with "%PDF".
+
+  // HTML invoice preview — let the browser render it directly.
+  if (ct.includes("text/html")) {
+    return { ok: true, kind: "html" };
+  }
+
+  // Plain text — almost always an error message.
+  if (ct.includes("text/plain")) {
+    try {
+      const text = await blob.text();
+      return { ok: false, message: text || "Server returned an error" };
+    } catch {
+      return { ok: false, message: "Server returned an error" };
+    }
+  }
+
+  // Magic-byte sniff: every valid PDF starts with "%PDF".
   try {
     const head = await blob.slice(0, 4).text();
-    if (head !== "%PDF") {
-      let message = "Server did not return a valid PDF";
-      try {
-        const text = await blob.text();
-        try {
-          const parsed = JSON.parse(text);
-          message = parsed?.message || parsed?.error || message;
-        } catch {
-          if (text.length < 800) message = text.replace(/<[^>]+>/g, " ").trim() || message;
-        }
-      } catch { /* ignore */ }
-      return { ok: false, message };
-    }
+    if (head === "%PDF") return { ok: true, kind: "pdf" };
   } catch {
     return { ok: false, message: "Could not read the downloaded file" };
   }
-  return { ok: true };
+
+  // Last-ditch: try to extract an error message from the body.
+  try {
+    const text = await blob.text();
+    if (text.trim().startsWith("<")) return { ok: true, kind: "html" }; // looks like HTML, no explicit Content-Type
+    try {
+      const parsed = JSON.parse(text);
+      return { ok: false, message: parsed?.message || parsed?.error || "Server did not return a valid PDF" };
+    } catch {
+      return { ok: false, message: text.length < 600 ? text.trim() : "Server did not return a valid PDF" };
+    }
+  } catch {
+    return { ok: false, message: "Server did not return a valid PDF" };
+  }
 };
 
 export const viewBlobInNewTab = (blob) => {

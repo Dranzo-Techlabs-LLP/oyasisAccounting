@@ -131,8 +131,14 @@ export default function BookingDetailPage() {
       if (!verdict.ok) {
         throw new Error(verdict.message);
       }
-      if (action === "view") viewBlobInNewTab(res.data);
-      else downloadBlob(res.data, `${item.bookingCode}-invoice.pdf`);
+      if (verdict.kind === "html") {
+        // The HTML invoice has its own Print / Close toolbar — always preview.
+        viewBlobInNewTab(res.data);
+      } else if (action === "view") {
+        viewBlobInNewTab(res.data);
+      } else {
+        downloadBlob(res.data, `${item.bookingCode}-invoice.pdf`);
+      }
       setInvoiceOptsOpen(false);
       load();
     } catch (e) {

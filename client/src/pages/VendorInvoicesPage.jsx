@@ -79,8 +79,13 @@ export default function VendorInvoicesPage() {
       if (!verdict.ok) {
         throw new Error(verdict.message);
       }
-      downloadBlob(res.data, `${row.invoiceNumber}.pdf`);
-      toast.success("Downloaded");
+      if (verdict.kind === "html") {
+        // HTML invoice — open in new tab; user prints / saves from there.
+        viewBlobInNewTab(res.data);
+      } else {
+        downloadBlob(res.data, `${row.invoiceNumber}.pdf`);
+        toast.success("Downloaded");
+      }
     } catch (e) { toast.error(e.response?.data?.message || e.message || "Download failed"); }
   };
 

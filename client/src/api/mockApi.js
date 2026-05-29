@@ -252,6 +252,188 @@ const createResponse = (data) => Promise.resolve({ data });
 const createBlobResponse = (text, contentType = "application/octet-stream") =>
   Promise.resolve({ data: new Blob([text], { type: contentType }) });
 
+const escapeHtml = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const inr = (v) =>
+  `₹${Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatLongDate = (d) => {
+  if (!d) return "";
+  try {
+    return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  } catch { return String(d); }
+};
+
+// Build a styled, printable HTML invoice page. Demo mode can't render real
+// PDFs, but every browser can print this to PDF or save the page directly.
+const buildInvoiceHtml = ({
+  title = "Tax Invoice",
+  settings = {},
+  invoiceNumber,
+  invoiceDate,
+  refLabel,
+  refValue,
+  customer = {},
+  lines = [],
+  subtotal = 0,
+  discountAmount = 0,
+  taxAmount = 0,
+  totalAmount = 0,
+  paidAmount = 0,
+  balanceDue = 0,
+  showGstin = true,
+  includeBank = true,
+  notes = ""
+}) => {
+  const addressLine = [settings.address, settings.city, settings.state, settings.country, settings.postalCode]
+    .filter(Boolean).join(", ");
+  const contactLine = [
+    settings.phone && `Phone: ${escapeHtml(settings.phone)}`,
+    settings.email && `Email: ${escapeHtml(settings.email)}`,
+    settings.website
+  ].filter(Boolean).join(" &nbsp;·&nbsp; ");
+  const taxLine = showGstin
+    ? [settings.gstin && `GSTIN: ${escapeHtml(settings.gstin)}`, settings.pan && `PAN: ${escapeHtml(settings.pan)}`].filter(Boolean).join(" &nbsp;·&nbsp; ")
+    : "";
+
+  const linesHtml = lines.map((l, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(l.description || "")}${l.hsn ? `<div class="muted">HSN: ${escapeHtml(l.hsn)}</div>` : ""}</td>
+      <td class="num">${l.qty ?? ""}</td>
+      <td class="num">${l.unitPrice != null ? inr(l.unitPrice) : ""}</td>
+      <td class="num">${l.taxRate ? l.taxRate + "%" : "—"}</td>
+      <td class="num">${inr(l.total)}</td>
+    </tr>
+  `).join("");
+
+  const bankHtml = includeBank ? `
+    <section class="card bank">
+      <h3>Bank / UPI</h3>
+      <div class="kv">
+        ${settings.bankName ? `<div><span>Bank</span><strong>${escapeHtml(settings.bankName)}</strong></div>` : ""}
+        ${settings.bankAccountName ? `<div><span>Account name</span><strong>${escapeHtml(settings.bankAccountName)}</strong></div>` : ""}
+        ${settings.bankAccountNumber ? `<div><span>Account no.</span><strong>${escapeHtml(settings.bankAccountNumber)}</strong></div>` : ""}
+        ${settings.bankIfsc ? `<div><span>IFSC</span><strong>${escapeHtml(settings.bankIfsc)}</strong></div>` : ""}
+        ${settings.bankBranch ? `<div><span>Branch</span><strong>${escapeHtml(settings.bankBranch)}</strong></div>` : ""}
+        ${settings.upiId ? `<div><span>UPI ID</span><strong>${escapeHtml(settings.upiId)}</strong></div>` : ""}
+      </div>
+    </section>` : "";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(invoiceNumber || title)} - ${escapeHtml(settings.businessName || "OasisGo Holidays")}</title>
+<style>
+  :root { --ink:#1d3a6e; --soft:#57658a; --line:#dbe4f0; --bg:#f5f7fb; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: #142447; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .toolbar { position: sticky; top: 0; z-index: 10; display: flex; gap: 8px; padding: 12px 16px; background: #ffffffee; backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+  .toolbar button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  .toolbar button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .toolbar button:hover { filter: brightness(0.96); }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .filename { color: var(--soft); font-size: 13px; align-self: center; }
+  .invoice { max-width: 820px; margin: 24px auto; background: #fff; padding: 40px 48px 56px; box-shadow: 0 8px 24px rgba(20,36,71,.08); border: 1px solid var(--line); border-radius: 6px; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 1px solid var(--line); padding-bottom: 20px; }
+  .biz h1 { margin: 0 0 6px; color: var(--ink); font-size: 26px; }
+  .biz p { margin: 2px 0; font-size: 12px; color: var(--soft); }
+  .meta { text-align: right; }
+  .meta .badge { display: inline-block; background: var(--ink); color: #fff; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; padding: 4px 10px; border-radius: 20px; }
+  .meta h2 { margin: 8px 0 4px; color: var(--ink); font-size: 18px; }
+  .meta .num { font-family: ui-monospace, Menlo, monospace; font-size: 15px; }
+  .meta p { margin: 2px 0; font-size: 12px; color: var(--soft); }
+  section.card { margin-top: 24px; padding: 16px 18px; background: #f8fafd; border: 1px solid var(--line); border-radius: 6px; }
+  section.card h3 { margin: 0 0 10px; color: var(--ink); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; }
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; font-size: 13px; }
+  .kv > div { display: flex; gap: 6px; align-items: baseline; }
+  .kv span { color: var(--soft); min-width: 110px; }
+  table.items { width: 100%; margin-top: 24px; border-collapse: collapse; font-size: 13px; }
+  table.items th { text-align: left; padding: 10px 8px; background: var(--ink); color: #fff; font-weight: 600; }
+  table.items th.num, table.items td.num { text-align: right; }
+  table.items td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.items td .muted { color: var(--soft); font-size: 11px; margin-top: 2px; }
+  .totals { margin-top: 16px; margin-left: auto; width: 320px; font-size: 13px; }
+  .totals .row { display: flex; justify-content: space-between; padding: 6px 0; }
+  .totals .row.grand { border-top: 1px solid var(--ink); margin-top: 6px; padding-top: 10px; font-size: 16px; color: var(--ink); font-weight: 700; }
+  .totals .row.balance { color: #b03330; font-weight: 600; }
+  .notes { margin-top: 24px; padding: 14px 16px; border-left: 3px solid var(--ink); background: #f8fafd; font-size: 13px; }
+  .footer { margin-top: 32px; font-size: 11px; color: var(--soft); text-align: center; border-top: 1px solid var(--line); padding-top: 14px; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .invoice { box-shadow: none; border: 0; margin: 0; max-width: none; padding: 24px 32px; }
+    @page { size: A4; margin: 12mm; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="primary" onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="window.close()">Close</button>
+    <span class="spacer"></span>
+    <span class="filename">${escapeHtml(invoiceNumber || "")}</span>
+  </div>
+  <article class="invoice">
+    <header class="head">
+      <div class="biz">
+        <h1>${escapeHtml(settings.businessName || "OasisGo Holidays")}</h1>
+        ${addressLine ? `<p>${escapeHtml(addressLine)}</p>` : ""}
+        ${contactLine ? `<p>${contactLine}</p>` : ""}
+        ${taxLine ? `<p>${taxLine}</p>` : ""}
+      </div>
+      <div class="meta">
+        <span class="badge">${escapeHtml(title)}</span>
+        <h2 class="num">${escapeHtml(invoiceNumber || "")}</h2>
+        <p>${escapeHtml(formatLongDate(invoiceDate))}</p>
+        ${refLabel && refValue ? `<p>${escapeHtml(refLabel)}: <strong>${escapeHtml(refValue)}</strong></p>` : ""}
+      </div>
+    </header>
+
+    <section class="card">
+      <h3>Billed to</h3>
+      <div class="kv">
+        <div><span>Name</span><strong>${escapeHtml(customer.fullName || "")}</strong></div>
+        ${customer.phone ? `<div><span>Phone</span><strong>${escapeHtml(customer.phone)}</strong></div>` : ""}
+        ${customer.email ? `<div><span>Email</span><strong>${escapeHtml(customer.email)}</strong></div>` : ""}
+        ${customer.address ? `<div><span>Address</span><strong>${escapeHtml(customer.address)}</strong></div>` : ""}
+      </div>
+    </section>
+
+    <table class="items">
+      <thead>
+        <tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Tax</th><th class="num">Amount</th></tr>
+      </thead>
+      <tbody>${linesHtml}</tbody>
+    </table>
+
+    <div class="totals">
+      <div class="row"><span>Subtotal</span><strong>${inr(subtotal)}</strong></div>
+      ${discountAmount > 0 ? `<div class="row"><span>Discount</span><strong>− ${inr(discountAmount)}</strong></div>` : ""}
+      ${taxAmount > 0 ? `<div class="row"><span>Tax (GST)</span><strong>${inr(taxAmount)}</strong></div>` : ""}
+      <div class="row grand"><span>Total</span><strong>${inr(totalAmount)}</strong></div>
+      <div class="row"><span>Paid</span><strong>${inr(paidAmount)}</strong></div>
+      <div class="row balance"><span>Balance due</span><strong>${inr(balanceDue)}</strong></div>
+    </div>
+
+    ${bankHtml}
+
+    ${notes ? `<div class="notes">${escapeHtml(notes)}</div>` : ""}
+    ${settings.invoiceTerms ? `<div class="notes"><strong>Terms:</strong> ${escapeHtml(settings.invoiceTerms)}</div>` : ""}
+
+    <p class="footer">Generated ${escapeHtml(new Date().toLocaleString("en-GB"))} · ${escapeHtml(settings.businessName || "OasisGo Holidays")}</p>
+  </article>
+</body>
+</html>`;
+};
+
 const parseRoute = (url) => url.replace(/^https?:\/\/[^/]+\/api/, "").replace(/^\/api/, "");
 
 const filterPackages = (items, params) =>
@@ -828,19 +1010,41 @@ export async function mockRequest(method, url, config = {}) {
     return createResponse({ invoice });
   }
 
-  if (/^\/invoices\/\d+\/pdf$/.test(route) && method === "get") {
-    const bookingId = Number(route.split("/")[2]);
+  if (/^\/invoices\/\d+\/pdf/.test(route) && method === "get") {
+    const bookingId = Number(route.split("/")[2].split("?")[0]);
     const booking = withRelations(state, state.bookings.find((item) => item.id === bookingId));
-    const text = [
-      "OasisGo Holidays Invoice",
-      booking.invoice?.invoiceNumber || `OGH-2026-${String(bookingId).padStart(4, "0")}`,
-      booking.customer.fullName,
-      booking.travelPackage.name,
-      `Total: INR ${booking.totalAmount}`,
-      `Paid: INR ${booking.paidAmount}`,
-      `Balance: INR ${booking.balanceDue}`
-    ].join("\n");
-    return createBlobResponse(text, "application/pdf");
+    const pkg = booking.travelPackage || {};
+    const adultRate = booking.adultPriceOverride != null ? Number(booking.adultPriceOverride) : Number(pkg.priceAdult || 0);
+    const childRate = booking.childPriceOverride != null ? Number(booking.childPriceOverride) : Number(pkg.priceChild || 0);
+    const lines = [];
+    if (booking.adults > 0) lines.push({ description: `${pkg.name || "Package"} — Adult fare`, qty: booking.adults, unitPrice: adultRate, total: adultRate * booking.adults });
+    if (booking.children > 0) lines.push({ description: `${pkg.name || "Package"} — Child fare`, qty: booking.children, unitPrice: childRate, total: childRate * booking.children });
+    (booking.extraCharges || []).forEach((c) => lines.push({ description: c.label, qty: 1, unitPrice: Number(c.amount || 0), total: Number(c.amount || 0) }));
+    const taxRate = Number(params.taxRate || 0);
+    const subtotal = Number(booking.subtotalAmount || lines.reduce((s, l) => s + Number(l.total || 0), 0));
+    const discountAmount = Number(booking.discountAmount || 0);
+    const taxBase = Math.max(subtotal - discountAmount, 0);
+    const taxAmount = taxRate > 0 ? taxBase * (taxRate / 100) : 0;
+    const html = buildInvoiceHtml({
+      title: "Tax Invoice",
+      settings: state.settings,
+      invoiceNumber: booking.invoice?.invoiceNumber || `OGH-${new Date().getFullYear()}-${String(bookingId).padStart(4, "0")}`,
+      invoiceDate: booking.invoice?.issuedDate || new Date().toISOString(),
+      refLabel: "Booking",
+      refValue: booking.bookingCode,
+      customer: booking.customer || {},
+      lines,
+      subtotal,
+      discountAmount,
+      taxAmount,
+      totalAmount: Number(booking.totalAmount || 0) + taxAmount,
+      paidAmount: Number(booking.paidAmount || 0),
+      balanceDue: Math.max((Number(booking.totalAmount || 0) + taxAmount) - Number(booking.paidAmount || 0), 0),
+      showGstin: params.showGstin !== "0",
+      includeBank: params.includeBank !== "0",
+      notes: params.notes || ""
+    });
+    return createBlobResponse(html, "text/html");
   }
 
   if (/^\/invoices\/\d+\/sent$/.test(route) && method === "patch") {
@@ -1213,15 +1417,35 @@ export async function mockRequest(method, url, config = {}) {
     const id = Number(route.split("/")[2].split("?")[0]);
     const inv = state.vendorInvoices.find((i) => i.id === id);
     const vendor = state.vendors.find((v) => v.id === inv?.vendorId);
-    const text = [
-      `${state.settings.businessName} – Vendor Invoice`,
-      `Invoice: ${inv?.invoiceNumber || ""}`,
-      `Vendor: ${vendor?.name || ""}`,
-      `Total: INR ${inv?.totalAmount || 0}`,
-      `Paid: INR ${inv?.paidAmount || 0}`,
-      `Balance: INR ${inv?.balanceDue || 0}`
-    ].join("\n");
-    return createBlobResponse(text, "application/pdf");
+    const items = inv ? state.vendorInvoiceItems.filter((it) => it.vendorInvoiceId === inv.id) : [];
+    const lines = items.map((it) => ({
+      description: it.description,
+      hsn: it.hsnCode || "",
+      qty: it.quantity,
+      unitPrice: it.unitPrice,
+      taxRate: it.taxRate,
+      total: Number(it.unitPrice || 0) * Number(it.quantity || 0)
+    }));
+    const html = buildInvoiceHtml({
+      title: "B2B Invoice",
+      settings: state.settings,
+      invoiceNumber: inv?.invoiceNumber || "",
+      invoiceDate: inv?.issueDate || new Date().toISOString(),
+      refLabel: "Vendor",
+      refValue: vendor?.name || "",
+      customer: vendor ? { fullName: vendor.name, phone: vendor.phone, email: vendor.email, address: [vendor.address, vendor.city, vendor.state].filter(Boolean).join(", ") } : {},
+      lines,
+      subtotal: Number(inv?.subtotalAmount || 0),
+      discountAmount: Number(inv?.discountAmount || 0),
+      taxAmount: Number(inv?.taxAmount || 0),
+      totalAmount: Number(inv?.totalAmount || 0),
+      paidAmount: Number(inv?.paidAmount || 0),
+      balanceDue: Number(inv?.balanceDue || 0),
+      showGstin: inv?.showGstin !== false,
+      includeBank: inv?.includeBank !== false,
+      notes: inv?.notes || ""
+    });
+    return createBlobResponse(html, "text/html");
   }
 
   /* ===================== Ticket Sales ===================== */
@@ -1385,16 +1609,36 @@ export async function mockRequest(method, url, config = {}) {
       sale.invoicedAt = new Date().toISOString();
       saveState(state);
     }
-    const text = [
-      `${state.settings.businessName} – Ticket Sale Invoice`,
-      `Sale: ${sale?.saleCode || ""}`,
-      `Invoice: ${sale?.invoiceNumber || ""}`,
-      `Customer: ${customer?.fullName || ""}`,
-      `Total: INR ${sale?.totalAmount || 0}`,
-      `Paid: INR ${sale?.paidAmount || 0}`,
-      `Balance: INR ${sale?.balanceDue || 0}`
-    ].join("\n");
-    return createBlobResponse(text, "application/pdf");
+    const lines = [];
+    const sellingPrice = Number(sale?.sellingPrice || 0);
+    if (sellingPrice > 0) lines.push({
+      description: `${sale.ticketType || "TICKET"}${sale.vendor ? " — " + sale.vendor : ""}${sale.reference ? " (" + sale.reference + ")" : ""}${(sale.fromLocation || sale.toLocation) ? ` · ${sale.fromLocation || "?"} → ${sale.toLocation || "?"}` : ""}`,
+      qty: Number(sale.passengers || 1),
+      unitPrice: sellingPrice / Math.max(Number(sale.passengers || 1), 1),
+      total: sellingPrice
+    });
+    const serviceFee = Number(sale?.serviceFee || 0);
+    if (serviceFee > 0) lines.push({ description: "Service fee", qty: 1, unitPrice: serviceFee, total: serviceFee });
+    const html = buildInvoiceHtml({
+      title: "Tax Invoice",
+      settings: state.settings,
+      invoiceNumber: sale?.invoiceNumber || "",
+      invoiceDate: sale?.invoicedAt || new Date().toISOString(),
+      refLabel: "Sale",
+      refValue: sale?.saleCode || "",
+      customer: customer || {},
+      lines,
+      subtotal: sellingPrice + serviceFee,
+      discountAmount: Number(sale?.discountAmount || 0),
+      taxAmount: Number(params.taxRate || 0) > 0 ? (Number(sale?.totalAmount || 0) * Number(params.taxRate) / 100) : 0,
+      totalAmount: Number(sale?.totalAmount || 0),
+      paidAmount: Number(sale?.paidAmount || 0),
+      balanceDue: Number(sale?.balanceDue || 0),
+      showGstin: params.showGstin !== "0",
+      includeBank: params.includeBank !== "0",
+      notes: params.notes || ""
+    });
+    return createBlobResponse(html, "text/html");
   }
 
   /* ===================== Ledger ===================== */

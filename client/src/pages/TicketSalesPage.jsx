@@ -72,8 +72,14 @@ export default function TicketSalesPage() {
       if (!verdict.ok) {
         throw new Error(verdict.message);
       }
-      if (action === "view") viewBlobInNewTab(res.data);
-      else downloadBlob(res.data, `${invoiceTarget.invoiceNumber || invoiceTarget.saleCode}-invoice.pdf`);
+      if (verdict.kind === "html") {
+        // The HTML invoice carries its own Print / Close toolbar.
+        viewBlobInNewTab(res.data);
+      } else if (action === "view") {
+        viewBlobInNewTab(res.data);
+      } else {
+        downloadBlob(res.data, `${invoiceTarget.invoiceNumber || invoiceTarget.saleCode}-invoice.pdf`);
+      }
       setInvoiceTarget(null);
       load();
     } catch (e) {
