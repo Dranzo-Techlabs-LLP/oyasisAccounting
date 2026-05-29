@@ -67,6 +67,51 @@ export const readBlobText = async (blob) => {
   return blob.text();
 };
 
+// Verify that what came back from a /pdf endpoint is actually a PDF, not an
+// HTML/JSON error response. Saving a non-PDF blob as `.pdf` produces a file
+// the user cannot open. Returns { ok: true } if the blob looks like a PDF,
+// or { ok: false, message } with the parsed server error otherwise.
+export const verifyPdfBlob = async (blob) => {
+  if (!(blob instanceof Blob)) {
+    return { ok: false, message: "Server returned unexpected data" };
+  }
+  const ct = (blob.type || "").toLowerCase();
+  if (ct.includes("application/json") || ct.includes("text/plain") || ct.includes("text/html")) {
+    let message = "Server returned an error instead of a PDF";
+    try {
+      const text = await blob.text();
+      // Try JSON first, then fall back to stripped HTML / raw text.
+      try {
+        const parsed = JSON.parse(text);
+        message = parsed?.message || parsed?.error || text;
+      } catch {
+        message = text.replace(/<[^>]+>/g, " ").trim() || message;
+      }
+    } catch { /* ignore */ }
+    return { ok: false, message };
+  }
+  // Inspect the first 4 bytes — every valid PDF starts with "%PDF".
+  try {
+    const head = await blob.slice(0, 4).text();
+    if (head !== "%PDF") {
+      let message = "Server did not return a valid PDF";
+      try {
+        const text = await blob.text();
+        try {
+          const parsed = JSON.parse(text);
+          message = parsed?.message || parsed?.error || message;
+        } catch {
+          if (text.length < 800) message = text.replace(/<[^>]+>/g, " ").trim() || message;
+        }
+      } catch { /* ignore */ }
+      return { ok: false, message };
+    }
+  } catch {
+    return { ok: false, message: "Could not read the downloaded file" };
+  }
+  return { ok: true };
+};
+
 export const viewBlobInNewTab = (blob) => {
   const safeBlob = blob instanceof Blob ? blob : new Blob([blob]);
   const url = window.URL.createObjectURL(safeBlob);

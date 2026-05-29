@@ -10,7 +10,7 @@ import VendorInvoiceForm from "../components/VendorInvoiceForm";
 import DataTable from "../components/DataTable";
 import StatusBadge from "../components/StatusBadge";
 import { SkeletonBlock } from "../components/Feedback";
-import { downloadBlob, formatCurrency, formatDate, readBlobText, viewBlobInNewTab } from "../utils/formatters";
+import { downloadBlob, formatCurrency, formatDate, readBlobText, verifyPdfBlob, viewBlobInNewTab } from "../utils/formatters";
 
 export default function VendorInvoicesPage() {
   const [items, setItems] = useState([]);
@@ -64,9 +64,9 @@ export default function VendorInvoicesPage() {
   const viewInvoice = async (row) => {
     try {
       const res = await api.get(`/vendor-invoices/${row.id}/pdf?inline=1`, { responseType: "blob" });
-      const ct = res.data?.type || "";
-      if (ct.includes("application/json") || ct.includes("text/plain")) {
-        const msg = await readBlobText(res.data); throw new Error(msg);
+      const verdict = await verifyPdfBlob(res.data);
+      if (!verdict.ok) {
+        throw new Error(verdict.message);
       }
       viewBlobInNewTab(res.data);
     } catch (e) { toast.error(e.response?.data?.message || e.message || "View failed"); }
@@ -75,9 +75,9 @@ export default function VendorInvoicesPage() {
   const downloadInvoice = async (row) => {
     try {
       const res = await api.get(`/vendor-invoices/${row.id}/pdf`, { responseType: "blob" });
-      const ct = res.data?.type || "";
-      if (ct.includes("application/json") || ct.includes("text/plain")) {
-        const msg = await readBlobText(res.data); throw new Error(msg);
+      const verdict = await verifyPdfBlob(res.data);
+      if (!verdict.ok) {
+        throw new Error(verdict.message);
       }
       downloadBlob(res.data, `${row.invoiceNumber}.pdf`);
       toast.success("Downloaded");

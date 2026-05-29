@@ -32,7 +32,7 @@ import PaymentForm from "../components/PaymentForm";
 import BookingForm from "../components/BookingForm";
 import InvoiceOptionsModal from "../components/InvoiceOptionsModal";
 import { EmptyState, SkeletonBlock } from "../components/Feedback";
-import { downloadBlob, formatCurrency, formatDate, readBlobText, viewBlobInNewTab } from "../utils/formatters";
+import { downloadBlob, formatCurrency, formatDate, readBlobText, verifyPdfBlob, viewBlobInNewTab } from "../utils/formatters";
 import StatusBadge from "../components/StatusBadge";
 
 const PAYEE_LABELS = {
@@ -127,9 +127,9 @@ export default function BookingDetailPage() {
       setBusy(true);
       await api.post(`/invoices/${item.id}/generate`);
       const res = await api.get(buildInvoiceUrl(opts, action === "view"), { responseType: "blob" });
-      const ct = res.data?.type || "";
-      if (ct.includes("application/json") || ct.includes("text/plain")) {
-        const msg = await readBlobText(res.data); throw new Error(msg);
+      const verdict = await verifyPdfBlob(res.data);
+      if (!verdict.ok) {
+        throw new Error(verdict.message);
       }
       if (action === "view") viewBlobInNewTab(res.data);
       else downloadBlob(res.data, `${item.bookingCode}-invoice.pdf`);
