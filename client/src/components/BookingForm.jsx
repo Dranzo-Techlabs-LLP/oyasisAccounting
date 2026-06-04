@@ -81,7 +81,9 @@ export default function BookingForm({
   const [pendingFiles, setPendingFiles] = useState([]);
   const [existingAttachments, setExistingAttachments] = useState([]);
   const [uploadingNow, setUploadingNow] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
+  const dragCounter = useRef(0);
   const isEdit = Boolean(initialValues?.id);
 
   useEffect(() => {
@@ -256,6 +258,35 @@ export default function BookingForm({
 
   const removePending = (index) =>
     setPendingFiles((curr) => curr.filter((_, i) => i !== index));
+
+  // Drag-and-drop on the Files tab. The counter trick avoids flicker when a
+  // drag passes over child elements (each child fires enter/leave).
+  const onDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    dragCounter.current += 1;
+    setDragOver(true);
+  };
+  const onDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setDragOver(false);
+  };
+  const onDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  };
+  const onDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setDragOver(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) onPickFiles(files);
+  };
 
   const uploadNowToExisting = async () => {
     if (!isEdit || pendingFiles.length === 0) return;
@@ -747,12 +778,20 @@ export default function BookingForm({
       )}
 
       {section === "attachments" && (
-        <div className="rounded-md border border-[var(--line)] bg-white p-4">
+        <div
+          className={`rounded-md border bg-white p-4 transition-colors ${
+            dragOver ? "border-[var(--brand)] bg-[var(--surface-muted)] ring-2 ring-[var(--brand)] ring-opacity-30" : "border-[var(--line)]"
+          }`}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+        >
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-[var(--text)]">Attachments</p>
               <p className="mt-0.5 text-xs text-[var(--text-soft)]">
-                Passport scans, hotel vouchers, signed contracts, tickets. Max 10 MB per file.
+                Passport scans, hotel vouchers, signed contracts, tickets. Max 10 MB per file. Drag files anywhere into this panel or click Choose files.
                 {!isEdit && " Files upload after the booking is created."}
               </p>
             </div>
@@ -827,9 +866,21 @@ export default function BookingForm({
             </div>
           ) : (
             !isEdit && existingAttachments.length === 0 && (
-              <p className="rounded-md bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--text-soft)]">
-                No files selected. Click "Choose files" to add attachments.
-              </p>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`flex w-full flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-3 py-8 text-center transition-colors ${
+                  dragOver
+                    ? "border-[var(--brand)] bg-white text-[var(--brand)]"
+                    : "border-[var(--line)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:border-[var(--brand)] hover:text-[var(--brand)]"
+                }`}
+              >
+                <Upload className="h-5 w-5" />
+                <p className="text-sm font-medium">
+                  {dragOver ? "Drop files to attach" : "Drag &amp; drop files here"}
+                </p>
+                <p className="text-xs">or click anywhere in this box to browse</p>
+              </button>
             )
           )}
         </div>
