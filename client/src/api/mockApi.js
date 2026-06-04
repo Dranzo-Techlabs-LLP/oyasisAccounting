@@ -419,7 +419,7 @@ const buildInvoiceHtml = ({
       ${discountAmount > 0 ? `<div class="row"><span>Discount</span><strong>− ${inr(discountAmount)}</strong></div>` : ""}
       ${taxAmount > 0 ? `<div class="row"><span>Tax (GST)</span><strong>${inr(taxAmount)}</strong></div>` : ""}
       <div class="row grand"><span>Total</span><strong>${inr(totalAmount)}</strong></div>
-      <div class="row"><span>Paid</span><strong>${inr(paidAmount)}</strong></div>
+      ${paidAmount > 0 ? `<div class="row"><span>Paid</span><strong>${inr(paidAmount)}</strong></div>` : ""}
       <div class="row balance"><span>Balance due</span><strong>${inr(balanceDue)}</strong></div>
     </div>
 
@@ -1017,9 +1017,21 @@ export async function mockRequest(method, url, config = {}) {
     const adultRate = booking.adultPriceOverride != null ? Number(booking.adultPriceOverride) : Number(pkg.priceAdult || 0);
     const childRate = booking.childPriceOverride != null ? Number(booking.childPriceOverride) : Number(pkg.priceChild || 0);
     const lines = [];
-    if (booking.adults > 0) lines.push({ description: `${pkg.name || "Package"} — Adult fare`, qty: booking.adults, unitPrice: adultRate, total: adultRate * booking.adults });
-    if (booking.children > 0) lines.push({ description: `${pkg.name || "Package"} — Child fare`, qty: booking.children, unitPrice: childRate, total: childRate * booking.children });
-    (booking.extraCharges || []).forEach((c) => lines.push({ description: c.label, qty: 1, unitPrice: Number(c.amount || 0), total: Number(c.amount || 0) }));
+    const adultLineTotal = adultRate * Number(booking.adults || 0);
+    if (Number(booking.adults || 0) > 0 && adultLineTotal > 0) {
+      lines.push({ description: `${pkg.name || "Package"} — Adult fare`, qty: booking.adults, unitPrice: adultRate, total: adultLineTotal });
+    }
+    const childLineTotal = childRate * Number(booking.children || 0);
+    if (Number(booking.children || 0) > 0 && childLineTotal > 0) {
+      lines.push({ description: `${pkg.name || "Package"} — Child fare`, qty: booking.children, unitPrice: childRate, total: childLineTotal });
+    }
+    (booking.extraCharges || []).forEach((c) => {
+      const amt = Number(c.amount || 0);
+      const label = String(c.label || "").trim();
+      if (amt > 0 && label) {
+        lines.push({ description: label, qty: 1, unitPrice: amt, total: amt });
+      }
+    });
     const taxRate = Number(params.taxRate || 0);
     const subtotal = Number(booking.subtotalAmount || lines.reduce((s, l) => s + Number(l.total || 0), 0));
     const discountAmount = Number(booking.discountAmount || 0);

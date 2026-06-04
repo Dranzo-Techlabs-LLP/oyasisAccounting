@@ -152,13 +152,36 @@ export const buildInvoicePdf = async (booking, options = {}) => {
     const displayBalance = Math.max(displayTotal - toNumber(booking.paidAmount), 0);
     const extras = booking.extraCharges || [];
 
+    // Use per-booking price overrides when set so the invoice matches the
+    // booking's actual cost basis rather than the default package price.
+    const effAdultRate = booking.adultPriceOverride != null
+      ? toNumber(booking.adultPriceOverride)
+      : toNumber(booking.travelPackage.priceAdult);
+    const effChildRate = booking.childPriceOverride != null
+      ? toNumber(booking.childPriceOverride)
+      : toNumber(booking.travelPackage.priceChild);
+
     // Row definitions: { label, value, bold, borderTop, gap (px below) }
-    const rows = [
-      { label: `Adult rate × ${booking.adults}`, value: money(toNumber(booking.travelPackage.priceAdult) * booking.adults), gap: 22 },
-      { label: `Child rate × ${booking.children}`, value: money(toNumber(booking.travelPackage.priceChild) * booking.children), gap: 22 },
-      ...extras.map((c) => ({ label: c.label, value: money(c.amount), gap: 22 })),
-      { label: "Subtotal", value: money(booking.subtotalAmount), bold: true, borderTop: true, gap: 24 }
-    ];
+    // Only include lines that carry meaningful value. Empty / zero rows are
+    // omitted so the invoice doesn't surface "Child rate × 0" or
+    // "Visa Fees · INR 0.00" when those weren't actually charged.
+    const rows = [];
+    const adultLineTotal = effAdultRate * Number(booking.adults || 0);
+    if (Number(booking.adults || 0) > 0 && adultLineTotal > 0) {
+      rows.push({ label: `Adult rate × ${booking.adults}`, value: money(adultLineTotal), gap: 22 });
+    }
+    const childLineTotal = effChildRate * Number(booking.children || 0);
+    if (Number(booking.children || 0) > 0 && childLineTotal > 0) {
+      rows.push({ label: `Child rate × ${booking.children}`, value: money(childLineTotal), gap: 22 });
+    }
+    extras.forEach((c) => {
+      const amt = toNumber(c.amount);
+      const label = String(c.label || "").trim();
+      if (amt > 0 && label) {
+        rows.push({ label, value: money(amt), gap: 22 });
+      }
+    });
+    rows.push({ label: "Subtotal", value: money(booking.subtotalAmount), bold: true, borderTop: true, gap: 24 });
     if (toNumber(booking.discountAmount) > 0) {
       rows.push({ label: "Discount", value: `- ${money(booking.discountAmount)}`, gap: 22 });
     }
@@ -166,7 +189,9 @@ export const buildInvoicePdf = async (booking, options = {}) => {
       rows.push({ label: `GST @ ${taxRate}%`, value: money(taxAmount), gap: 22 });
     }
     rows.push({ label: "Total Amount", value: money(displayTotal), bold: true, borderTop: true, gap: 26 });
-    rows.push({ label: "Amount Paid", value: money(booking.paidAmount), gap: 22 });
+    if (toNumber(booking.paidAmount) > 0) {
+      rows.push({ label: "Amount Paid", value: money(booking.paidAmount), gap: 22 });
+    }
     rows.push({ label: "Balance Due", value: money(displayBalance), bold: true, gap: 0 });
 
     const TITLE_PAD_TOP = 18;
