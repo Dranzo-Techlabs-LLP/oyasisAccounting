@@ -161,12 +161,22 @@ export default function BookingForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.packageId, form.departureDate]);
 
-  const effectiveAdultRate = form.priceOverrideEnabled && form.adultPriceOverride !== ""
-    ? Number(form.adultPriceOverride)
-    : Number(selectedPackage?.priceAdult || 0);
-  const effectiveChildRate = form.priceOverrideEnabled && form.childPriceOverride !== ""
-    ? Number(form.childPriceOverride)
-    : Number(selectedPackage?.priceChild || 0);
+  // Resolve a price override. 0 and empty are treated as "no override" so a
+  // half-filled override doesn't silently zero out the booking's totals (the
+  // package default kicks in instead). A real override must be > 0.
+  const resolveOverride = (raw) => {
+    if (!form.priceOverrideEnabled) return null;
+    if (raw === "" || raw == null) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  };
+  const adultOverride = resolveOverride(form.adultPriceOverride);
+  const childOverride = resolveOverride(form.childPriceOverride);
+  const adultFellBack = form.priceOverrideEnabled && adultOverride == null && form.adultPriceOverride !== "";
+  const childFellBack = form.priceOverrideEnabled && childOverride == null && form.childPriceOverride !== "";
+  const effectiveAdultRate = adultOverride != null ? adultOverride : Number(selectedPackage?.priceAdult || 0);
+  const effectiveChildRate = childOverride != null ? childOverride : Number(selectedPackage?.priceChild || 0);
 
   const liveTotals = useMemo(() => {
     if (!selectedPackage) return { total: 0, subtotal: 0, paid: 0, balance: 0, payouts: 0, margin: 0 };
@@ -397,8 +407,8 @@ export default function BookingForm({
           adults: Number(form.adults),
           children: Number(form.children),
           endDate: form.endDate || null,
-          adultPriceOverride: form.priceOverrideEnabled && form.adultPriceOverride !== "" ? Number(form.adultPriceOverride) : null,
-          childPriceOverride: form.priceOverrideEnabled && form.childPriceOverride !== "" ? Number(form.childPriceOverride) : null,
+          adultPriceOverride: adultOverride,
+          childPriceOverride: childOverride,
           discountValue: Number(form.discountValue),
           extraCharges: form.extraCharges
             .filter((item) => item.label)
@@ -496,10 +506,16 @@ export default function BookingForm({
                 <Field label={`Adult rate ${selectedPackage ? `(default ${formatCurrency(selectedPackage.priceAdult)})` : ""}`}>
                   <Input type="number" min="0" step="0.01" value={form.adultPriceOverride}
                     onChange={(e) => setForm((c) => ({ ...c, adultPriceOverride: e.target.value }))} />
+                  {adultFellBack && (
+                    <p className="mt-1 text-xs text-amber-700">Override is 0 — package default will be used.</p>
+                  )}
                 </Field>
                 <Field label={`Child rate ${selectedPackage ? `(default ${formatCurrency(selectedPackage.priceChild)})` : ""}`}>
                   <Input type="number" min="0" step="0.01" value={form.childPriceOverride}
                     onChange={(e) => setForm((c) => ({ ...c, childPriceOverride: e.target.value }))} />
+                  {childFellBack && (
+                    <p className="mt-1 text-xs text-amber-700">Override is 0 — package default will be used.</p>
+                  )}
                 </Field>
               </div>
             )}

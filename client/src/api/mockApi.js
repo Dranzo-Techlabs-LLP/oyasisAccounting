@@ -666,8 +666,16 @@ export async function mockRequest(method, url, config = {}) {
         return nextCustomer.id;
       })();
     const selectedPackage = state.packages.find((item) => item.id === payload.packageId);
-    const adultTotal = selectedPackage.priceAdult * payload.adults;
-    const childTotal = selectedPackage.priceChild * payload.children;
+    // Treat a 0 override as "no override" so a half-filled custom-pricing
+    // toggle doesn't silently zero out the booking total.
+    const adultOverride = payload.adultPriceOverride != null && Number(payload.adultPriceOverride) > 0
+      ? Number(payload.adultPriceOverride) : null;
+    const childOverride = payload.childPriceOverride != null && Number(payload.childPriceOverride) > 0
+      ? Number(payload.childPriceOverride) : null;
+    const effAdultRate = adultOverride != null ? adultOverride : Number(selectedPackage.priceAdult || 0);
+    const effChildRate = childOverride != null ? childOverride : Number(selectedPackage.priceChild || 0);
+    const adultTotal = effAdultRate * payload.adults;
+    const childTotal = effChildRate * payload.children;
     const extras = (payload.extraCharges || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const subtotalAmount = adultTotal + childTotal + extras;
     const discountAmount =
@@ -691,8 +699,8 @@ export async function mockRequest(method, url, config = {}) {
       endDate: payload.endDate ? new Date(payload.endDate).toISOString() : null,
       adults: payload.adults,
       children: payload.children,
-      adultPriceOverride: payload.adultPriceOverride ?? null,
-      childPriceOverride: payload.childPriceOverride ?? null,
+      adultPriceOverride: adultOverride,
+      childPriceOverride: childOverride,
       extraCharges: payload.extraCharges || [],
       discountType: payload.discountType,
       discountValue: payload.discountValue,
@@ -783,14 +791,18 @@ export async function mockRequest(method, url, config = {}) {
 
     const adults = Number(payload.adults ?? existing.adults ?? 0);
     const children = Number(payload.children ?? existing.children ?? 0);
+    // Treat a 0 override as "no override". Matches the server's defensive
+    // coercion so a stale 0-override booking heals on the next save.
+    const putAdultOverride =
+      payload.adultPriceOverride != null && Number(payload.adultPriceOverride) > 0
+        ? Number(payload.adultPriceOverride) : null;
+    const putChildOverride =
+      payload.childPriceOverride != null && Number(payload.childPriceOverride) > 0
+        ? Number(payload.childPriceOverride) : null;
     const adultRate =
-      payload.adultPriceOverride != null
-        ? Number(payload.adultPriceOverride)
-        : Number(selectedPackage?.priceAdult || 0);
+      putAdultOverride != null ? putAdultOverride : Number(selectedPackage?.priceAdult || 0);
     const childRate =
-      payload.childPriceOverride != null
-        ? Number(payload.childPriceOverride)
-        : Number(selectedPackage?.priceChild || 0);
+      putChildOverride != null ? putChildOverride : Number(selectedPackage?.priceChild || 0);
     const extraCharges = Array.isArray(payload.extraCharges)
       ? payload.extraCharges
           .filter((item) => item && item.label)
@@ -900,8 +912,8 @@ export async function mockRequest(method, url, config = {}) {
       endDate: payload.endDate ? new Date(payload.endDate).toISOString() : existing.endDate || null,
       adults,
       children,
-      adultPriceOverride: payload.adultPriceOverride ?? null,
-      childPriceOverride: payload.childPriceOverride ?? null,
+      adultPriceOverride: putAdultOverride,
+      childPriceOverride: putChildOverride,
       extraCharges,
       discountType,
       discountValue: discountValueRaw,

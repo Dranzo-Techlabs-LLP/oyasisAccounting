@@ -325,8 +325,14 @@ router.post("/", async (req, res) => {
         : []);
   const paidSum = installments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-  const effectiveAdultRate = body.adultPriceOverride != null ? body.adultPriceOverride : travelPackage.priceAdult;
-  const effectiveChildRate = body.childPriceOverride != null ? body.childPriceOverride : travelPackage.priceChild;
+  // Defensive: a 0 override means "free" but in practice it's almost always a
+  // form bug (user enabled override, never filled the field). Treat it as
+  // "no override" so the package default kicks in and the booking gets a
+  // sane total instead of being silently zeroed out.
+  const adultOverride = body.adultPriceOverride != null && Number(body.adultPriceOverride) > 0 ? body.adultPriceOverride : null;
+  const childOverride = body.childPriceOverride != null && Number(body.childPriceOverride) > 0 ? body.childPriceOverride : null;
+  const effectiveAdultRate = adultOverride != null ? adultOverride : travelPackage.priceAdult;
+  const effectiveChildRate = childOverride != null ? childOverride : travelPackage.priceChild;
   const amounts = computeBookingAmounts({
     adultRate: effectiveAdultRate,
     childRate: effectiveChildRate,
@@ -347,8 +353,8 @@ router.post("/", async (req, res) => {
       endDate: body.endDate ? new Date(body.endDate) : null,
       adults: body.adults,
       children: body.children,
-      adultPriceOverride: body.adultPriceOverride ?? null,
-      childPriceOverride: body.childPriceOverride ?? null,
+      adultPriceOverride: adultOverride,
+      childPriceOverride: childOverride,
       extraCharges: body.extraCharges,
       discountType: body.discountType,
       discountValue: body.discountValue,
@@ -424,8 +430,12 @@ router.put("/:id", async (req, res) => {
     return res.status(404).json({ message: "Booking not found" });
   }
 
-  const effectiveAdultRate = body.adultPriceOverride != null ? body.adultPriceOverride : travelPackage.priceAdult;
-  const effectiveChildRate = body.childPriceOverride != null ? body.childPriceOverride : travelPackage.priceChild;
+  // Same defensive coercion as POST: a 0 override is treated as "no
+  // override" so a misconfigured booking re-saves with sane totals.
+  const adultOverride = body.adultPriceOverride != null && Number(body.adultPriceOverride) > 0 ? body.adultPriceOverride : null;
+  const childOverride = body.childPriceOverride != null && Number(body.childPriceOverride) > 0 ? body.childPriceOverride : null;
+  const effectiveAdultRate = adultOverride != null ? adultOverride : travelPackage.priceAdult;
+  const effectiveChildRate = childOverride != null ? childOverride : travelPackage.priceChild;
   const amounts = computeBookingAmounts({
     adultRate: effectiveAdultRate,
     childRate: effectiveChildRate,
@@ -446,8 +456,8 @@ router.put("/:id", async (req, res) => {
       endDate: body.endDate ? new Date(body.endDate) : null,
       adults: body.adults,
       children: body.children,
-      adultPriceOverride: body.adultPriceOverride ?? null,
-      childPriceOverride: body.childPriceOverride ?? null,
+      adultPriceOverride: adultOverride,
+      childPriceOverride: childOverride,
       extraCharges: body.extraCharges,
       discountType: body.discountType,
       discountValue: body.discountValue,
