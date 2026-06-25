@@ -2,13 +2,13 @@ import { useState } from "react";
 import { Button, Field, Input, Select, Textarea } from "./FormPrimitives";
 import { formatCurrency } from "../utils/formatters";
 
-const METHODS = ["Cash", "Bank Transfer", "UPI", "Card", "Cheque", "Other"];
+const METHODS = ["UPI", "Cash", "Bank Transfer", "Card", "Cheque", "Other"];
 
 export default function PaymentForm({ onSubmit, busy, balance }) {
   const [form, setForm] = useState({
     amount: "",
     paymentDate: new Date().toISOString().slice(0, 10),
-    method: "Bank Transfer",
+    method: "UPI",
     note: ""
   });
 

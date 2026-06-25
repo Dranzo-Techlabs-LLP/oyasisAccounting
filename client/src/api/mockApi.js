@@ -239,11 +239,36 @@ const saveState = (state) => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 };
 
+// When the user picks a date from <input type="date"> the value is a bare
+// YYYY-MM-DD with no time component. Combine it with the current local time
+// so payments captured today can be ordered later in the day correctly.
+// Strings that already carry a time component are passed through untouched.
+const stampDateWithNow = (raw) => {
+  if (!raw) return new Date().toISOString();
+  const s = String(raw);
+  if (s.includes("T")) return new Date(s).toISOString();
+  const now = new Date();
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString();
+  d.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+  return d.toISOString();
+};
+
 const withRelations = (state, booking) => ({
   ...booking,
   customer: state.customers.find((item) => item.id === booking.customerId),
   travelPackage: state.packages.find((item) => item.id === booking.packageId),
-  payments: state.payments.filter((item) => item.bookingId === booking.id).sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate)),
+  // Ascending: oldest installment first, newest last (so #1 = oldest in
+  // the UI). When two payments share the same timestamp (e.g. legacy
+  // records stored at UTC midnight), break the tie by id so the order
+  // reflects creation order — first created → #1.
+  payments: state.payments
+    .filter((item) => item.bookingId === booking.id)
+    .sort((a, b) => {
+      const d = new Date(a.paymentDate) - new Date(b.paymentDate);
+      if (d !== 0) return d;
+      return Number(a.id) - Number(b.id);
+    }),
   invoice: state.invoices.find((item) => item.bookingId === booking.id) || null
 });
 
@@ -302,16 +327,31 @@ const buildInvoiceHtml = ({
     ? [settings.gstin && `GSTIN: ${escapeHtml(settings.gstin)}`, settings.pan && `PAN: ${escapeHtml(settings.pan)}`].filter(Boolean).join(" &nbsp;·&nbsp; ")
     : "";
 
-  const linesHtml = lines.map((l, i) => `
+  // Fare lines always spell out "rate × qty" inside the Rate cell (e.g.
+  // "₹28,999.00 × 5") so the buyer can verify the line total without a
+  // separate Calc column. Non-fare extras (Visa Fees, Insurance) keep a
+  // plain rate when the quantity is 1 since the figure is already obvious.
+  const linesHtml = lines.map((l, i) => {
+    const qty = Number(l.qty || 0);
+    const unit = Number(l.unitPrice || 0);
+    const isFare = !!l.isFare;
+    const showCalc = (isFare || qty > 1) && unit > 0 && qty > 0;
+    const rateCell = l.unitPrice == null
+      ? ""
+      : showCalc
+        ? `${inr(unit)} <span class="muted">× ${qty}</span>`
+        : inr(unit);
+    return `
     <tr>
       <td>${i + 1}</td>
       <td>${escapeHtml(l.description || "")}${l.hsn ? `<div class="muted">HSN: ${escapeHtml(l.hsn)}</div>` : ""}</td>
       <td class="num">${l.qty ?? ""}</td>
-      <td class="num">${l.unitPrice != null ? inr(l.unitPrice) : ""}</td>
+      <td class="num">${rateCell}</td>
       <td class="num">${l.taxRate ? l.taxRate + "%" : "—"}</td>
       <td class="num">${inr(l.total)}</td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
   const bankHtml = includeBank ? `
     <section class="card bank">
@@ -760,7 +800,7 @@ export async function mockRequest(method, url, config = {}) {
           id: state.payments.length + 1,
           bookingId: nextBooking.id,
           amount: Number(p.amount || 0),
-          paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString() : new Date().toISOString(),
+          paymentDate: stampDateWithNow(p.paymentDate),
           method: p.method || "Cash",
           note: p.note || ""
         });
@@ -843,7 +883,7 @@ export async function mockRequest(method, url, config = {}) {
           id: recordId,
           bookingId: id,
           amount,
-          paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString() : new Date().toISOString(),
+          paymentDate: stampDateWithNow(p.paymentDate),
           method: p.method || "Cash",
           note: p.note || ""
         };
@@ -992,7 +1032,7 @@ export async function mockRequest(method, url, config = {}) {
       id: state.payments.length + 1,
       bookingId: id,
       amount: Number(payload.amount),
-      paymentDate: new Date(payload.paymentDate).toISOString(),
+      paymentDate: stampDateWithNow(payload.paymentDate),
       method: payload.method,
       note: payload.note
     };
@@ -1031,11 +1071,11 @@ export async function mockRequest(method, url, config = {}) {
     const lines = [];
     const adultLineTotal = adultRate * Number(booking.adults || 0);
     if (Number(booking.adults || 0) > 0 && adultLineTotal > 0) {
-      lines.push({ description: `${pkg.name || "Package"} — Adult fare`, qty: booking.adults, unitPrice: adultRate, total: adultLineTotal });
+      lines.push({ description: `${pkg.name || "Package"} — Adult fare`, qty: booking.adults, unitPrice: adultRate, total: adultLineTotal, isFare: true });
     }
     const childLineTotal = childRate * Number(booking.children || 0);
     if (Number(booking.children || 0) > 0 && childLineTotal > 0) {
-      lines.push({ description: `${pkg.name || "Package"} — Child fare`, qty: booking.children, unitPrice: childRate, total: childLineTotal });
+      lines.push({ description: `${pkg.name || "Package"} — Child fare`, qty: booking.children, unitPrice: childRate, total: childLineTotal, isFare: true });
     }
     (booking.extraCharges || []).forEach((c) => {
       const amt = Number(c.amount || 0);
@@ -1423,7 +1463,7 @@ export async function mockRequest(method, url, config = {}) {
       id: state.vendorInvoicePayments.length + 1,
       vendorInvoiceId: id,
       amount,
-      paymentDate: payload.paymentDate ? new Date(payload.paymentDate).toISOString() : new Date().toISOString(),
+      paymentDate: stampDateWithNow(payload.paymentDate),
       method: payload.method || "Bank Transfer",
       note: payload.note || ""
     };
@@ -1584,7 +1624,7 @@ export async function mockRequest(method, url, config = {}) {
       id: state.ticketSalePayments.length + 1,
       ticketSaleId: id,
       amount,
-      paymentDate: payload.paymentDate ? new Date(payload.paymentDate).toISOString() : new Date().toISOString(),
+      paymentDate: stampDateWithNow(payload.paymentDate),
       method: payload.method || "Cash",
       note: payload.note || ""
     };
@@ -1639,7 +1679,8 @@ export async function mockRequest(method, url, config = {}) {
       description: `${sale.ticketType || "TICKET"}${sale.vendor ? " — " + sale.vendor : ""}${sale.reference ? " (" + sale.reference + ")" : ""}${(sale.fromLocation || sale.toLocation) ? ` · ${sale.fromLocation || "?"} → ${sale.toLocation || "?"}` : ""}`,
       qty: Number(sale.passengers || 1),
       unitPrice: sellingPrice / Math.max(Number(sale.passengers || 1), 1),
-      total: sellingPrice
+      total: sellingPrice,
+      isFare: true
     });
     const serviceFee = Number(sale?.serviceFee || 0);
     if (serviceFee > 0) lines.push({ description: "Service fee", qty: 1, unitPrice: serviceFee, total: serviceFee });
@@ -1963,7 +2004,11 @@ export async function mockRequest(method, url, config = {}) {
     return createResponse({ ...updated, attachments: updated?.attachments || [] });
   }
 
-  throw new Error(`Mock route not implemented: ${method.toUpperCase()} ${route}`);
+  // Reachable only in demo mode when the UI exercises a brand-new endpoint
+  // that hasn't been ported into the offline mock yet. Keep the surfaced
+  // message friendly; the developer detail goes to the console.
+  console.warn(`Mock route not implemented: ${method.toUpperCase()} ${route}`);
+  throw new Error("This action isn't available in demo mode.");
 }
 
 export const isMockSession = () => Boolean(window.localStorage.getItem(AUTH_KEY));

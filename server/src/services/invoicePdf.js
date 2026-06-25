@@ -165,14 +165,29 @@ export const buildInvoicePdf = async (booking, options = {}) => {
     // Only include lines that carry meaningful value. Empty / zero rows are
     // omitted so the invoice doesn't surface "Child rate × 0" or
     // "Visa Fees · INR 0.00" when those weren't actually charged.
+    // Fare rows always spell out the per-pax rate and the multiplier, even
+    // when the count is 1 — so the invoice reads consistently. Example:
+    //   "Adult fare [INR 28,999.00] × 5"
+    //   "Child fare [INR 19,999.00] × 1"
+    // Non-fare extras (Visa Fees, Insurance) stay on their single line.
     const rows = [];
-    const adultLineTotal = effAdultRate * Number(booking.adults || 0);
-    if (Number(booking.adults || 0) > 0 && adultLineTotal > 0) {
-      rows.push({ label: `Adult rate × ${booking.adults}`, value: money(adultLineTotal), gap: 22 });
+    const adultCount = Number(booking.adults || 0);
+    const adultLineTotal = effAdultRate * adultCount;
+    if (adultCount > 0 && adultLineTotal > 0) {
+      rows.push({
+        label: `Adult fare [${money(effAdultRate)}] × ${adultCount}`,
+        value: money(adultLineTotal),
+        gap: 22
+      });
     }
-    const childLineTotal = effChildRate * Number(booking.children || 0);
-    if (Number(booking.children || 0) > 0 && childLineTotal > 0) {
-      rows.push({ label: `Child rate × ${booking.children}`, value: money(childLineTotal), gap: 22 });
+    const childCount = Number(booking.children || 0);
+    const childLineTotal = effChildRate * childCount;
+    if (childCount > 0 && childLineTotal > 0) {
+      rows.push({
+        label: `Child fare [${money(effChildRate)}] × ${childCount}`,
+        value: money(childLineTotal),
+        gap: 22
+      });
     }
     extras.forEach((c) => {
       const amt = toNumber(c.amount);

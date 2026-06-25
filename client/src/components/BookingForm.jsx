@@ -17,6 +17,11 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// Payment methods offered for booking installments. Mirrors PaymentForm /
+// QuickPayment so the choices stay consistent across the app. UPI is the
+// default in India, so it's first in the list.
+const PAYMENT_METHODS = ["UPI", "Cash", "Bank Transfer", "Card", "Cheque", "Other"];
+
 const PAYEE_TYPES = [
   ["HOTEL", "Hotel"],
   ["B2B", "B2B Partner"],
@@ -88,13 +93,23 @@ export default function BookingForm({
 
   useEffect(() => {
     if (initialValues) {
-      const existingPayments = (initialValues.payments || []).map((p) => ({
-        id: p.id,
-        amount: p.amount,
-        paymentDate: p.paymentDate ? String(p.paymentDate).slice(0, 10) : todayISO(),
-        method: p.method || "Cash",
-        note: p.note || ""
-      }));
+      // Show installments oldest-first so the order matches the booking
+      // detail Payment History and is consistent with how invoices read.
+      // Fall back to id when timestamps tie (e.g. legacy midnight rows).
+      const existingPayments = (initialValues.payments || [])
+        .slice()
+        .sort((a, b) => {
+          const d = new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0);
+          if (d !== 0) return d;
+          return Number(a.id || 0) - Number(b.id || 0);
+        })
+        .map((p) => ({
+          id: p.id,
+          amount: p.amount,
+          paymentDate: p.paymentDate ? String(p.paymentDate).slice(0, 10) : todayISO(),
+          method: p.method || "UPI",
+          note: p.note || ""
+        }));
       setForm({
         ...initialForm,
         ...initialValues,
@@ -206,7 +221,7 @@ export default function BookingForm({
 
   /* ===== Installments ===== */
   const addInstallment = () =>
-    setList("installments", (arr) => [...arr, { amount: "", paymentDate: todayISO(), method: "Cash", note: "" }]);
+    setList("installments", (arr) => [...arr, { amount: "", paymentDate: todayISO(), method: "UPI", note: "" }]);
   const splitEqually = (count) => {
     const remaining = Math.max(liveTotals.total - liveTotals.paid, 0);
     if (!count || remaining <= 0) return;
@@ -214,7 +229,7 @@ export default function BookingForm({
     const newOnes = Array.from({ length: count }, (_, i) => ({
       amount: i === count - 1 ? Math.max(remaining - each * (count - 1), 0) : each,
       paymentDate: todayISO(),
-      method: "Cash",
+      method: "UPI",
       note: `Installment ${i + 1}/${count}`
     }));
     setList("installments", (arr) => [...arr, ...newOnes]);
@@ -355,7 +370,7 @@ export default function BookingForm({
             ...(p.id ? { id: p.id } : {}),
             amount: Number(p.amount || 0),
             paymentDate: p.paymentDate || todayISO(),
-            method: p.method || "Cash",
+            method: p.method || "UPI",
             note: p.note || ""
           }))
           .filter((p) => p.amount > 0);
@@ -672,7 +687,11 @@ export default function BookingForm({
                 <div key={p.id ?? `np-${i}`} className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-3 lg:grid-cols-[140px_150px_140px_1fr_44px]">
                   <Input type="number" min="0" placeholder="Amount" value={p.amount} disabled={p.locked} onChange={(e) => updateAt("installments", i, { amount: e.target.value })} />
                   <Input type="date" value={p.paymentDate} disabled={p.locked} onChange={(e) => updateAt("installments", i, { paymentDate: e.target.value })} />
-                  <Input placeholder="Method" value={p.method} disabled={p.locked} onChange={(e) => updateAt("installments", i, { method: e.target.value })} />
+                  <Select value={p.method || "UPI"} disabled={p.locked} onChange={(e) => updateAt("installments", i, { method: e.target.value })}>
+                    {PAYMENT_METHODS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </Select>
                   <Input placeholder="Note" value={p.note} disabled={p.locked} onChange={(e) => updateAt("installments", i, { note: e.target.value })} />
                   <button type="button" disabled={p.locked} onClick={() => removeAt("installments", i)} aria-label="Remove"
                     className="flex h-11 items-center justify-center rounded-md border border-[var(--line)] bg-white text-[var(--text-soft)] hover:text-red-600 disabled:opacity-40">

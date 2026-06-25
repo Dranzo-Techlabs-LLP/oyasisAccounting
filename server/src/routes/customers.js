@@ -43,7 +43,7 @@ router.get("/:id", async (req, res) => {
           travelPackage: true,
           invoice: true,
           payments: {
-            orderBy: { paymentDate: "desc" }
+            orderBy: [{ paymentDate: "asc" }, { id: "asc" }]
           }
         },
         orderBy: { departureDate: "desc" }

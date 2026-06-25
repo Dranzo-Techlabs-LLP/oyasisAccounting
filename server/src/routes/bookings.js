@@ -127,7 +127,7 @@ const paymentSchema = paymentInputSchema.extend({
 const bookingInclude = {
   customer: true,
   travelPackage: true,
-  payments: { orderBy: { paymentDate: "desc" } },
+  payments: { orderBy: [{ paymentDate: "asc" }, { id: "asc" }] },
   travellers: { orderBy: { id: "asc" } },
   payouts: { orderBy: { id: "asc" } },
   tickets: { orderBy: { id: "asc" } },

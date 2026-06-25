@@ -118,8 +118,16 @@ export const buildTicketSaleInvoicePdf = async (sale, invoiceNumber, options = {
     const displayTotal = baseTotal + taxAmount;
     const displayBalance = Math.max(displayTotal - toNumber(sale.paidAmount), 0);
 
+    // Show the per-pax rate in brackets and the multiplier inline so the
+    // buyer can see how the total was calculated. Format is consistent
+    // whether the sale is for 1 passenger or 10:
+    //   "Ticket fare [INR 6,500.00] × 2 pax"
+    //   "Ticket fare [INR 6,500.00] × 1 pax"
+    const pax = Number(sale.passengers || 1);
+    const perPax = pax > 0 ? toNumber(sale.sellingPrice) / pax : toNumber(sale.sellingPrice);
+    const fareLabel = `Ticket fare [${money(perPax)}] × ${pax} pax`;
     const rows = [
-      { label: `Ticket fare (${sale.passengers} pax)`, value: money(sale.sellingPrice), gap: 22 }
+      { label: fareLabel, value: money(sale.sellingPrice), gap: 22 }
     ];
     if (toNumber(sale.serviceFee) > 0) {
       rows.push({ label: "Service Fee", value: money(sale.serviceFee), gap: 22 });

@@ -130,8 +130,10 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
 
     // ---------- Items table ----------
     // Columns: # | Description | Qty | Rate | Tax% | Amount
-    const colX = { idx: 46, desc: 76, qty: 326, rate: 372, tax: 432, total: 488 };
-    const colW = { idx: 26, desc: 248, qty: 44, rate: 56, tax: 50, total: 60 };
+    // The Rate cell embeds "unit x qty" inline (e.g. "INR 28,999 x 5") so a
+    // buyer can verify the line total without a separate Calc column.
+    const colX = { idx: 46, desc: 76, qty: 326, rate: 360, tax: 442, total: 488 };
+    const colW = { idx: 26, desc: 248, qty: 30, rate: 78, tax: 42, total: 60 };
 
     // Header
     doc.rect(46, tableTop, 503, 24).fillAndStroke("#1d3a6e", "#1d3a6e");
@@ -154,11 +156,16 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
       if (zebra) {
         doc.rect(46, rowY - 6, 503, 24).fill("#f7faff");
       }
+      const qty = toNumber(item.quantity);
+      const unit = toNumber(item.unitPrice);
+      const rateText = qty > 1 && unit > 0
+        ? `${money(unit, invoice.currency)} x ${qty}`
+        : money(unit, invoice.currency);
       doc.font("Helvetica").fontSize(10).fillColor("#142447");
       doc.text(String(idx + 1), colX.idx + 6, rowY, { width: colW.idx });
       doc.text(item.description, colX.desc, rowY, { width: colW.desc });
-      doc.text(String(toNumber(item.quantity)), colX.qty, rowY, { width: colW.qty, align: "right" });
-      doc.text(money(item.unitPrice, invoice.currency), colX.rate - 10, rowY, { width: colW.rate + 10, align: "right" });
+      doc.text(String(qty), colX.qty, rowY, { width: colW.qty, align: "right" });
+      doc.text(rateText, colX.rate - 4, rowY, { width: colW.rate + 4, align: "right" });
       doc.text(`${toNumber(item.taxRate)}%`, colX.tax, rowY, { width: colW.tax, align: "right" });
       doc.text(money(item.totalAmount, invoice.currency), colX.total - 10, rowY, { width: colW.total + 10, align: "right" });
       rowY += 24;
