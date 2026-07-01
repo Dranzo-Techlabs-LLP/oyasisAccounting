@@ -53,6 +53,9 @@ const customerInlineSchema = z.object({
 });
 
 const paymentInputSchema = z.object({
+  // id lets the booking-edit PUT reconcile kept rows in place instead of
+  // delete-and-recreate, so existing payment ids stay stable across saves.
+  id: z.coerce.number().int().positive().optional(),
   amount: z.coerce.number().positive(),
   paymentDate: z.string(),
   method: z.string().min(1).default("Cash"),
