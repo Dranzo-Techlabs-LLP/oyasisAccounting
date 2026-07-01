@@ -416,6 +416,13 @@ router.post("/", async (req, res) => {
   res.status(201).json(serializeBooking(fresh));
 });
 
+// Convert a possibly empty/null client date value into either a Date or null.
+const dateOrNull = (v) => {
+  if (v == null || v === "") return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
 router.put("/:id", async (req, res) => {
   const id = Number(req.params.id);
   const body = bookingSchema.parse(req.body);
@@ -436,47 +443,179 @@ router.put("/:id", async (req, res) => {
   const childOverride = body.childPriceOverride != null && Number(body.childPriceOverride) > 0 ? body.childPriceOverride : null;
   const effectiveAdultRate = adultOverride != null ? adultOverride : travelPackage.priceAdult;
   const effectiveChildRate = childOverride != null ? childOverride : travelPackage.priceChild;
-  const amounts = computeBookingAmounts({
-    adultRate: effectiveAdultRate,
-    childRate: effectiveChildRate,
-    adults: body.adults,
-    children: body.children,
-    extraCharges: body.extraCharges,
-    discountType: body.discountType,
-    discountValue: body.discountValue,
-    paidAmount: existing.paidAmount
-  });
 
-  const updated = await prisma.booking.update({
-    where: { id },
-    data: {
-      customerId: body.customerId || existing.customerId,
-      packageId: body.packageId,
-      departureDate: new Date(body.departureDate),
-      endDate: body.endDate ? new Date(body.endDate) : null,
+  // Reconcile everything inside a single transaction so a mid-write failure
+  // leaves nothing half-applied.
+  const refreshed = await prisma.$transaction(async (tx) => {
+    // -------- Payments (reconcile: update kept rows, create new rows, delete removed rows) --------
+    let paidSum = toNumber(existing.paidAmount);
+    if (Array.isArray(body.payments)) {
+      const submitted = body.payments.filter((p) => Number(p.amount || 0) > 0);
+      const keepIds = submitted.map((p) => Number(p.id)).filter((n) => Number.isFinite(n) && n > 0);
+      await tx.payment.deleteMany({
+        where: {
+          bookingId: id,
+          ...(keepIds.length > 0 ? { id: { notIn: keepIds } } : {})
+        }
+      });
+      for (const p of submitted) {
+        const data = {
+          amount: Number(p.amount || 0),
+          paymentDate: dateOrNull(p.paymentDate) || new Date(),
+          method: p.method || "Cash",
+          note: p.note || null
+        };
+        if (Number(p.id) > 0) {
+          await tx.payment.update({ where: { id: Number(p.id) }, data });
+        } else {
+          await tx.payment.create({ data: { ...data, bookingId: id } });
+        }
+      }
+      // Recompute paid from the reconciled payments table.
+      const rows = await tx.payment.findMany({
+        where: { bookingId: id },
+        select: { amount: true }
+      });
+      paidSum = rows.reduce((s, r) => s + toNumber(r.amount), 0);
+    }
+
+    // -------- Travellers --------
+    if (Array.isArray(body.travellers)) {
+      const submitted = body.travellers.filter((t) => String(t.fullName || "").trim());
+      const keepIds = submitted.map((t) => Number(t.id)).filter((n) => Number.isFinite(n) && n > 0);
+      await tx.bookingTraveller.deleteMany({
+        where: {
+          bookingId: id,
+          ...(keepIds.length > 0 ? { id: { notIn: keepIds } } : {})
+        }
+      });
+      for (const t of submitted) {
+        const data = {
+          fullName: t.fullName.trim(),
+          age: t.age == null || t.age === "" ? null : Number(t.age),
+          gender: t.gender || null,
+          passportNo: t.passportNo || null,
+          phone: t.phone || null,
+          isPrimary: !!t.isPrimary,
+          note: t.note || null
+        };
+        if (Number(t.id) > 0) {
+          await tx.bookingTraveller.update({ where: { id: Number(t.id) }, data });
+        } else {
+          await tx.bookingTraveller.create({ data: { ...data, bookingId: id } });
+        }
+      }
+    }
+
+    // -------- Payouts (suppliers) --------
+    if (Array.isArray(body.payouts)) {
+      const submitted = body.payouts.filter((p) => String(p.payeeName || "").trim());
+      const keepIds = submitted.map((p) => Number(p.id)).filter((n) => Number.isFinite(n) && n > 0);
+      await tx.bookingPayout.deleteMany({
+        where: {
+          bookingId: id,
+          ...(keepIds.length > 0 ? { id: { notIn: keepIds } } : {})
+        }
+      });
+      for (const p of submitted) {
+        const data = {
+          payeeType: p.payeeType || PayeeType.OTHER,
+          payeeName: p.payeeName.trim(),
+          amount: Number(p.amount || 0),
+          status: p.status || PayoutStatus.PENDING,
+          dueDate: dateOrNull(p.dueDate),
+          paidDate: dateOrNull(p.paidDate),
+          reference: p.reference || null,
+          note: p.note || null
+        };
+        if (Number(p.id) > 0) {
+          await tx.bookingPayout.update({ where: { id: Number(p.id) }, data });
+        } else {
+          await tx.bookingPayout.create({ data: { ...data, bookingId: id } });
+        }
+      }
+    }
+
+    // -------- Tickets --------
+    if (Array.isArray(body.tickets)) {
+      const submitted = body.tickets.filter(
+        (t) => t.vendor || t.reference || t.fromLocation || t.toLocation
+      );
+      const keepIds = submitted.map((t) => Number(t.id)).filter((n) => Number.isFinite(n) && n > 0);
+      await tx.bookingTicket.deleteMany({
+        where: {
+          bookingId: id,
+          ...(keepIds.length > 0 ? { id: { notIn: keepIds } } : {})
+        }
+      });
+      for (const t of submitted) {
+        const data = {
+          ticketType: t.ticketType || TicketType.FLIGHT,
+          vendor: t.vendor || null,
+          reference: t.reference || null,
+          fromLocation: t.fromLocation || null,
+          toLocation: t.toLocation || null,
+          departAt: dateOrNull(t.departAt),
+          returnAt: dateOrNull(t.returnAt),
+          passengers: Number(t.passengers || 1),
+          amount: Number(t.amount || 0),
+          status: t.status || TicketStatus.BOOKED,
+          note: t.note || null
+        };
+        if (Number(t.id) > 0) {
+          await tx.bookingTicket.update({ where: { id: Number(t.id) }, data });
+        } else {
+          await tx.bookingTicket.create({ data: { ...data, bookingId: id } });
+        }
+      }
+    }
+
+    // -------- Booking core + recomputed totals --------
+    const amounts = computeBookingAmounts({
+      adultRate: effectiveAdultRate,
+      childRate: effectiveChildRate,
       adults: body.adults,
       children: body.children,
-      adultPriceOverride: adultOverride,
-      childPriceOverride: childOverride,
       extraCharges: body.extraCharges,
       discountType: body.discountType,
       discountValue: body.discountValue,
-      discountAmount: amounts.discountAmount,
-      subtotalAmount: amounts.subtotalAmount,
-      totalAmount: amounts.totalAmount,
-      balanceDue: Math.max(amounts.totalAmount - toNumber(existing.paidAmount), 0),
-      paymentStatus:
-        toNumber(existing.paidAmount) >= amounts.totalAmount
-          ? PaymentStatus.PAID
-          : toNumber(existing.paidAmount) > 0
-            ? PaymentStatus.PARTIAL
-            : PaymentStatus.PENDING,
-      bookingStatus: body.bookingStatus,
-      notes: body.notes || null
-    },
-    include: bookingInclude
+      paidAmount: paidSum
+    });
+
+    await tx.booking.update({
+      where: { id },
+      data: {
+        customerId: body.customerId || existing.customerId,
+        packageId: body.packageId,
+        departureDate: new Date(body.departureDate),
+        endDate: body.endDate ? new Date(body.endDate) : null,
+        adults: body.adults,
+        children: body.children,
+        adultPriceOverride: adultOverride,
+        childPriceOverride: childOverride,
+        extraCharges: body.extraCharges,
+        discountType: body.discountType,
+        discountValue: body.discountValue,
+        discountAmount: amounts.discountAmount,
+        subtotalAmount: amounts.subtotalAmount,
+        totalAmount: amounts.totalAmount,
+        paidAmount: paidSum,
+        balanceDue: Math.max(amounts.totalAmount - paidSum, 0),
+        paymentStatus:
+          paidSum >= amounts.totalAmount
+            ? PaymentStatus.PAID
+            : paidSum > 0
+              ? PaymentStatus.PARTIAL
+              : PaymentStatus.PENDING,
+        bookingStatus: body.bookingStatus,
+        notes: body.notes || null
+      }
+    });
+
+    return tx.booking.findUnique({ where: { id }, include: bookingInclude });
   });
-  res.json(serializeBooking(updated));
+
+  res.json(serializeBooking(refreshed));
 });
 
 router.post("/:id/payments", async (req, res) => {
