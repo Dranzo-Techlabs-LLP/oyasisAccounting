@@ -519,7 +519,7 @@ export default function BookingDetailPage() {
                         <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--surface-muted)] px-2 text-[10px] font-semibold text-[var(--text-soft)]">#{idx + 1}</span>
                         <p className="text-base font-semibold text-[var(--text)]">{formatCurrency(p.amount)}</p>
                       </div>
-                      <p className="mt-1 text-xs text-[var(--text-soft)]">{p.method} · {formatDateTime(p.paymentDate)}</p>
+                      <p className="mt-1 text-xs text-[var(--text-soft)]">{p.method} · {formatDate(p.paymentDate)}</p>
                       {p.note && <p className="mt-2 text-sm text-[var(--text-soft)] break-words">{p.note}</p>}
                     </div>
                     <button onClick={() => deletePayment(p.id)} aria-label="Delete" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
