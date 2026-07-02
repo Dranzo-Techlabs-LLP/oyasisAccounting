@@ -137,11 +137,19 @@ export const verifyPdfBlob = async (blob) => {
 export const viewBlobInNewTab = (blob) => {
   const safeBlob = blob instanceof Blob ? blob : new Blob([blob]);
   const url = window.URL.createObjectURL(safeBlob);
-  const w = window.open(url, "_blank", "noopener,noreferrer");
-  if (!w) {
-    // Popup blocked — fallback to navigation
-    window.location.href = url;
-  }
-  // Release after a delay (let browser load it first)
+  // Use an anchor click rather than window.open. window.open(url, "_blank",
+  // "noopener…") returns null even on SUCCESS (noopener severs the handle),
+  // which previously made the code think the popup was blocked and ALSO run
+  // window.location.href = url — opening the PDF in TWO tabs (and hijacking
+  // the app tab). An anchor with target="_blank" opens exactly one tab and
+  // never navigates the current one.
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Release after a delay (let the new tab load it first).
   window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 };

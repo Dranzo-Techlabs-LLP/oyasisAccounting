@@ -28,9 +28,20 @@ const __dirname = path.dirname(__filename);
 
 export const app = express();
 
+// Allow the configured client origin plus its localhost/127.0.0.1 twin so
+// dev works whether the app is opened via localhost:5173 or 127.0.0.1:5173.
+const corsOrigins = (() => {
+  const set = new Set([env.clientUrl].filter(Boolean));
+  if (env.clientUrl) {
+    set.add(env.clientUrl.replace("localhost", "127.0.0.1"));
+    set.add(env.clientUrl.replace("127.0.0.1", "localhost"));
+  }
+  return [...set];
+})();
+
 app.use(
   cors({
-    origin: env.clientUrl,
+    origin: corsOrigins,
     credentials: true
   })
 );
