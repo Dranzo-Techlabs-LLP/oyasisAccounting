@@ -125,7 +125,9 @@ export default function BookingDetailPage() {
   const handleInvoice = async ({ action, ...opts }) => {
     try {
       setBusy(true);
-      await api.post(`/invoices/${item.id}/generate`);
+      // GET /invoices/:id/pdf already creates the invoice record server-side
+      // (ensureInvoice), so a separate POST /generate is a wasted round-trip.
+      // One request instead of two ~halves the perceived load time.
       const res = await api.get(buildInvoiceUrl(opts, action === "view"), { responseType: "blob" });
       const verdict = await verifyPdfBlob(res.data);
       if (!verdict.ok) {
