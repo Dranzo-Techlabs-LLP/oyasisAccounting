@@ -7,8 +7,12 @@ import Modal from "../components/Modal";
 import CustomerForm from "../components/CustomerForm";
 import DataTable from "../components/DataTable";
 import { SkeletonBlock } from "../components/Feedback";
+import { useAuth } from "../context/AuthContext";
 
 export default function CustomersPage() {
+  const { can } = useAuth();
+  const canWrite = can("customers", "write");
+  const canDelete = can("customers", "delete");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -66,16 +70,20 @@ export default function CustomersPage() {
       key: "actions", label: "Actions", sortable: false,
       render: (r) => (
         <div className="flex gap-2">
-          <Button variant="secondary" className="w-10 px-0" onClick={() => { setEditing(r); setOpen(true); }}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button variant="danger" className="w-10 px-0" onClick={async () => {
-            if (!window.confirm("Delete this customer?")) return;
-            try { await api.delete(`/customers/${r.id}`); toast.success("Customer deleted"); load(); }
-            catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
-          }}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {canWrite && (
+            <Button variant="secondary" className="w-10 px-0" onClick={() => { setEditing(r); setOpen(true); }}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+          {canDelete && (
+            <Button variant="danger" className="w-10 px-0" onClick={async () => {
+              if (!window.confirm("Delete this customer?")) return;
+              try { await api.delete(`/customers/${r.id}`); toast.success("Customer deleted"); load(); }
+              catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
+            }}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -89,9 +97,11 @@ export default function CustomersPage() {
             <h2 className="text-base font-semibold text-[var(--text)]">Customers</h2>
             <p className="mt-0.5 text-xs text-[var(--text-soft)]">Search, filter, and sort customer records.</p>
           </div>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add Customer
-          </Button>
+          {canWrite && (
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add Customer
+            </Button>
+          )}
         </div>
       </div>
 

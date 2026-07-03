@@ -9,11 +9,15 @@ import DataTable from "../components/DataTable";
 import StatusBadge from "../components/StatusBadge";
 import { SkeletonBlock } from "../components/Feedback";
 import { downloadBlob, formatCurrency, formatDate } from "../utils/formatters";
+import { useAuth } from "../context/AuthContext";
 
 const COMMON_INCOME_CATS = ["Booking Payment", "Ticket Sale Payment", "B2B Invoice Payment", "Service Fee", "Refund Received", "Other Income"];
 const COMMON_EXPENSE_CATS = ["Rent", "Salary", "Utilities", "Marketing", "Internet & Phone", "Software", "Travel", "Office Supplies", "Bank Charges", "Other Expense"];
 
 export default function LedgerPage() {
+  const { can } = useAuth();
+  const canWrite = can("ledger", "write");
+  const canDelete = can("ledger", "delete");
   const [month, setMonth] = useState(dayjs().format("YYYY-MM"));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -105,16 +109,20 @@ export default function LedgerPage() {
         const realId = String(r.id).replace(/^m-/, "");
         return (
           <div className="flex gap-1">
-            <Button variant="secondary" className="w-9 px-0" onClick={() => { setEditing({ ...r, id: realId }); setOpen(true); }}>
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button variant="danger" className="w-9 px-0" onClick={async () => {
-              if (!window.confirm("Delete this entry?")) return;
-              try { await api.delete(`/ledger/${realId}`); toast.success("Deleted"); load(month); }
-              catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
-            }}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {canWrite && (
+              <Button variant="secondary" className="w-9 px-0" onClick={() => { setEditing({ ...r, id: realId }); setOpen(true); }}>
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button variant="danger" className="w-9 px-0" onClick={async () => {
+                if (!window.confirm("Delete this entry?")) return;
+                try { await api.delete(`/ledger/${realId}`); toast.success("Deleted"); load(month); }
+                catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
+              }}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         );
       }
@@ -137,11 +145,13 @@ export default function LedgerPage() {
           <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-48" />
           <Button variant="secondary" onClick={() => load(month)}>Reload</Button>
           <Button variant="secondary" onClick={exportCsv}><Download className="h-4 w-4" /> Export CSV</Button>
-          <div className="ml-auto">
-            <Button onClick={() => { setEditing(null); setOpen(true); }}>
-              <Plus className="h-4 w-4" /> Add Entry
-            </Button>
-          </div>
+          {canWrite && (
+            <div className="ml-auto">
+              <Button onClick={() => { setEditing(null); setOpen(true); }}>
+                <Plus className="h-4 w-4" /> Add Entry
+              </Button>
+            </div>
+          )}
         </div>
         <p className="mt-2 text-xs text-[var(--text-soft)]">
           Auto entries flow in from booking payments, ticket sale payments, B2B invoice payments, supplier payouts and ticket-sale supplier payments. Manual entries are editable.

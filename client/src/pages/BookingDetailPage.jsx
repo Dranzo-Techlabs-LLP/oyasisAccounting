@@ -34,6 +34,7 @@ import InvoiceOptionsModal from "../components/InvoiceOptionsModal";
 import { EmptyState, SkeletonBlock } from "../components/Feedback";
 import { downloadBlob, formatCurrency, formatDate, readBlobText, verifyPdfBlob, viewBlobInNewTab } from "../utils/formatters";
 import StatusBadge from "../components/StatusBadge";
+import { useAuth } from "../context/AuthContext";
 
 const PAYEE_LABELS = {
   HOTEL: "Hotel",
@@ -71,6 +72,10 @@ const formatBytes = (n) => {
 };
 
 export default function BookingDetailPage() {
+  const { can } = useAuth();
+  const canWrite = can("bookings", "write");
+  const canDelete = can("bookings", "delete");
+  const canInvoice = can("invoices", "write");
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const [item, setItem] = useState(null);
@@ -254,12 +259,16 @@ export default function BookingDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge value={item.bookingStatus} />
                 <StatusBadge value={item.paymentStatus} />
-                <Button variant="secondary" onClick={() => setEditOpen(true)}>
-                  <Pencil className="h-4 w-4" /> Edit
-                </Button>
-                <Button variant="danger" onClick={deleteBooking}>
-                  <Trash2 className="h-4 w-4" /> Delete
-                </Button>
+                {canWrite && (
+                  <Button variant="secondary" onClick={() => setEditOpen(true)}>
+                    <Pencil className="h-4 w-4" /> Edit
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button variant="danger" onClick={deleteBooking}>
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -339,9 +348,11 @@ export default function BookingDetailPage() {
                 <Users className="h-4 w-4" /> Travellers
                 <span className="text-xs font-normal text-[var(--text-soft)]">({(item.travellers || []).length})</span>
               </h3>
-              <Button variant="secondary" onClick={() => setTravellerOpen(true)}>
-                <UserPlus className="h-4 w-4" /> Add Traveller
-              </Button>
+              {canWrite && (
+                <Button variant="secondary" onClick={() => setTravellerOpen(true)}>
+                  <UserPlus className="h-4 w-4" /> Add Traveller
+                </Button>
+              )}
             </div>
             <div className="mt-3 space-y-2">
               {(item.travellers || []).length === 0 ? (
@@ -359,9 +370,11 @@ export default function BookingDetailPage() {
                       </p>
                       {t.note && <p className="mt-2 text-sm text-[var(--text-soft)] break-words">{t.note}</p>}
                     </div>
-                    <button onClick={() => deleteTraveller(t.id)} aria-label="Remove" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {canWrite && (
+                      <button onClick={() => deleteTraveller(t.id)} aria-label="Remove" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -375,9 +388,11 @@ export default function BookingDetailPage() {
                 <Ticket className="h-4 w-4" /> Tickets
                 <span className="text-xs font-normal text-[var(--text-soft)]">({(item.tickets || []).length})</span>
               </h3>
-              <Button variant="secondary" onClick={() => setTicketOpen(true)}>
-                <Plus className="h-4 w-4" /> Add Ticket
-              </Button>
+              {canWrite && (
+                <Button variant="secondary" onClick={() => setTicketOpen(true)}>
+                  <Plus className="h-4 w-4" /> Add Ticket
+                </Button>
+              )}
             </div>
             <div className="mt-3 space-y-2">
               {(item.tickets || []).length === 0 ? (
@@ -411,9 +426,11 @@ export default function BookingDetailPage() {
                         </p>
                         {t.note && <p className="mt-2 text-sm text-[var(--text-soft)] break-words">{t.note}</p>}
                       </div>
-                      <button onClick={() => deleteTicket(t.id)} aria-label="Remove" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {canWrite && (
+                        <button onClick={() => deleteTicket(t.id)} aria-label="Remove" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -428,9 +445,11 @@ export default function BookingDetailPage() {
                 <Building2 className="h-4 w-4" /> Supplier / B2B Payouts
                 <span className="text-xs font-normal text-[var(--text-soft)]">({(item.payouts || []).length})</span>
               </h3>
-              <Button variant="secondary" onClick={() => setPayoutOpen(true)}>
-                <Plus className="h-4 w-4" /> Add Payout
-              </Button>
+              {canWrite && (
+                <Button variant="secondary" onClick={() => setPayoutOpen(true)}>
+                  <Plus className="h-4 w-4" /> Add Payout
+                </Button>
+              )}
             </div>
             <div className="mt-3 space-y-2">
               {(item.payouts || []).length === 0 ? (
@@ -459,14 +478,16 @@ export default function BookingDetailPage() {
                       {p.note && <p className="mt-2 text-sm text-[var(--text-soft)] break-words">{p.note}</p>}
                     </div>
                     <div className="flex gap-1">
-                      {p.status !== "PAID" && (
+                      {canWrite && p.status !== "PAID" && (
                         <button onClick={() => markPayoutPaid(p.id)} title="Mark paid" className="rounded-md border border-[var(--line)] p-2 text-emerald-600 hover:bg-emerald-50">
                           <CheckCircle2 className="h-4 w-4" />
                         </button>
                       )}
-                      <button onClick={() => deletePayout(p.id)} aria-label="Remove" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {canWrite && (
+                        <button onClick={() => deletePayout(p.id)} aria-label="Remove" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -479,13 +500,17 @@ export default function BookingDetailPage() {
         <div className="grid gap-5">
           <div className="panel rounded-lg p-4 sm:p-5">
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => setPaymentOpen(true)}>
-                <Plus className="h-4 w-4" /> Add Payment
-              </Button>
-              <Button variant="secondary" onClick={() => setInvoiceOptsOpen(true)}>
-                <FileText className="h-4 w-4" /> Invoice
-              </Button>
-              {item.invoice && (
+              {canWrite && (
+                <Button onClick={() => setPaymentOpen(true)}>
+                  <Plus className="h-4 w-4" /> Add Payment
+                </Button>
+              )}
+              {canInvoice && (
+                <Button variant="secondary" onClick={() => setInvoiceOptsOpen(true)}>
+                  <FileText className="h-4 w-4" /> Invoice
+                </Button>
+              )}
+              {canInvoice && item.invoice && (
                 <Button variant="secondary" onClick={async () => {
                   await api.patch(`/invoices/${item.invoice.id}/sent`);
                   toast.success("Invoice marked as sent"); load();
@@ -524,14 +549,16 @@ export default function BookingDetailPage() {
                       <p className="mt-1 text-xs text-[var(--text-soft)]">{p.method} · {formatDate(p.paymentDate)}</p>
                       {p.note && <p className="mt-2 text-sm text-[var(--text-soft)] break-words">{p.note}</p>}
                     </div>
-                    <button onClick={() => deletePayment(p.id)} aria-label="Delete" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {canWrite && (
+                      <button onClick={() => deletePayment(p.id)} aria-label="Delete" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
-            {balance > 0 && (
+            {canWrite && balance > 0 && (
               <button type="button" onClick={() => setPaymentOpen(true)}
                 className="mt-3 w-full rounded-md border border-dashed border-[var(--line)] py-2 text-sm font-medium text-[var(--brand)] hover:bg-[var(--surface-muted)]">
                 + Record next installment ({formatCurrency(balance)} remaining)
@@ -547,9 +574,11 @@ export default function BookingDetailPage() {
                 <span className="text-xs font-normal text-[var(--text-soft)]">({(item.attachments || []).length})</span>
               </h3>
               <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => uploadFiles(e.target.files)} />
-              <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={busy}>
-                <Upload className="h-4 w-4" /> {busy ? "Uploading..." : "Upload"}
-              </Button>
+              {canWrite && (
+                <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+                  <Upload className="h-4 w-4" /> {busy ? "Uploading..." : "Upload"}
+                </Button>
+              )}
             </div>
             <p className="mt-1 text-xs text-[var(--text-soft)]">Passport scans, hotel vouchers, signed contracts, tickets — up to 10 MB each.</p>
 
@@ -571,9 +600,11 @@ export default function BookingDetailPage() {
                     <button onClick={() => downloadAttachment(a)} aria-label="Download" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:text-[var(--brand)]">
                       <Download className="h-4 w-4" />
                     </button>
-                    <button onClick={() => deleteAttachment(a.id)} aria-label="Delete" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {canWrite && (
+                      <button onClick={() => deleteAttachment(a.id)} aria-label="Delete" className="rounded-md border border-[var(--line)] p-2 text-[var(--text-soft)] hover:border-red-300 hover:text-red-600">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

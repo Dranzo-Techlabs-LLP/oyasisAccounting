@@ -37,6 +37,13 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       loading,
+      // Permission check used to show/hide action buttons. ADMIN always true.
+      // action defaults to "read". Mirrors the server's guardModule logic.
+      can(module, action = "read") {
+        if (!user) return false;
+        if (user.role === "ADMIN") return true;
+        return Boolean(user.permissions?.[module]?.[action]);
+      },
       async login(payload) {
         const response = await api.post("/auth/login", payload);
         setUser(response.data.user);

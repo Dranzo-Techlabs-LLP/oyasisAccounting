@@ -11,8 +11,12 @@ import DataTable from "../components/DataTable";
 import StatusBadge from "../components/StatusBadge";
 import { SkeletonBlock } from "../components/Feedback";
 import { downloadBlob, formatCurrency, formatDate, readBlobText, verifyPdfBlob, viewBlobInNewTab } from "../utils/formatters";
+import { useAuth } from "../context/AuthContext";
 
 export default function VendorInvoicesPage() {
+  const { can } = useAuth();
+  const canWrite = can("vendorInvoices", "write");
+  const canDelete = can("vendorInvoices", "delete");
   const [items, setItems] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -183,33 +187,39 @@ export default function VendorInvoicesPage() {
           <Button variant="secondary" className="w-9 px-0" title="Download PDF" onClick={() => downloadInvoice(r)}>
             <Download className="h-4 w-4" />
           </Button>
-          {r.status !== "PAID" && r.status !== "CANCELLED" && (
+          {canWrite && r.status !== "PAID" && r.status !== "CANCELLED" && (
             <Button variant="secondary" className="w-9 px-0" title="Record Payment" onClick={() => setPaymentTarget(r)}>
               <Wallet className="h-4 w-4" />
             </Button>
           )}
-          {r.status === "DRAFT" && (
+          {canWrite && r.status === "DRAFT" && (
             <Button variant="secondary" className="w-9 px-0" title="Mark Sent" onClick={() => markSent(r.id)}>
               <Send className="h-4 w-4" />
             </Button>
           )}
-          <Button variant="secondary" className="w-9 px-0" title="Edit" onClick={async () => {
-            const res = await api.get(`/vendor-invoices/${r.id}`);
-            setEditing(res.data); setOpen(true);
-          }}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button variant="secondary" className="w-9 px-0" title="Duplicate" onClick={() => duplicate(r.id)}>
-            <Copy className="h-4 w-4" />
-          </Button>
-          {r.status !== "CANCELLED" && (
+          {canWrite && (
+            <Button variant="secondary" className="w-9 px-0" title="Edit" onClick={async () => {
+              const res = await api.get(`/vendor-invoices/${r.id}`);
+              setEditing(res.data); setOpen(true);
+            }}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+          {canWrite && (
+            <Button variant="secondary" className="w-9 px-0" title="Duplicate" onClick={() => duplicate(r.id)}>
+              <Copy className="h-4 w-4" />
+            </Button>
+          )}
+          {canWrite && r.status !== "CANCELLED" && (
             <Button variant="secondary" className="w-9 px-0" title="Cancel" onClick={() => cancelInv(r.id)}>
               <X className="h-4 w-4" />
             </Button>
           )}
-          <Button variant="danger" className="w-9 px-0" title="Delete" onClick={() => deleteInv(r.id)}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {canDelete && (
+            <Button variant="danger" className="w-9 px-0" title="Delete" onClick={() => deleteInv(r.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -230,9 +240,11 @@ export default function VendorInvoicesPage() {
             <h2 className="text-base font-semibold text-[var(--text)]">B2B Invoices</h2>
             <p className="mt-0.5 text-xs text-[var(--text-soft)]">Custom invoices to agents, corporate clients and B2B partners with line items.</p>
           </div>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> New Invoice
-          </Button>
+          {canWrite && (
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="h-4 w-4" /> New Invoice
+            </Button>
+          )}
         </div>
       </div>
 

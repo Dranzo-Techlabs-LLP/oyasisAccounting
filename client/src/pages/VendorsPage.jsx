@@ -8,6 +8,7 @@ import VendorForm from "../components/VendorForm";
 import DataTable from "../components/DataTable";
 import StatusBadge from "../components/StatusBadge";
 import { SkeletonBlock } from "../components/Feedback";
+import { useAuth } from "../context/AuthContext";
 
 const TYPE_LABEL = {
   B2B: "B2B Partner", AGENT: "Agent", CORPORATE: "Corporate",
@@ -16,6 +17,9 @@ const TYPE_LABEL = {
 };
 
 export default function VendorsPage() {
+  const { can } = useAuth();
+  const canWrite = can("vendors", "write");
+  const canDelete = can("vendors", "delete");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -87,16 +91,20 @@ export default function VendorsPage() {
       key: "actions", label: "Actions", sortable: false,
       render: (r) => (
         <div className="flex gap-1">
-          <Button variant="secondary" className="w-10 px-0" onClick={() => { setEditing(r); setOpen(true); }}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button variant="danger" className="w-10 px-0" onClick={async () => {
-            if (!window.confirm(`Delete vendor ${r.name}?`)) return;
-            try { await api.delete(`/vendors/${r.id}`); toast.success("Deleted"); load(); }
-            catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
-          }}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {canWrite && (
+            <Button variant="secondary" className="w-10 px-0" onClick={() => { setEditing(r); setOpen(true); }}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+          {canDelete && (
+            <Button variant="danger" className="w-10 px-0" onClick={async () => {
+              if (!window.confirm(`Delete vendor ${r.name}?`)) return;
+              try { await api.delete(`/vendors/${r.id}`); toast.success("Deleted"); load(); }
+              catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
+            }}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -110,9 +118,11 @@ export default function VendorsPage() {
             <h2 className="text-base font-semibold text-[var(--text)]">Vendors & B2B Partners</h2>
             <p className="mt-0.5 text-xs text-[var(--text-soft)]">Agents, corporate clients, hotels and suppliers you bill or pay.</p>
           </div>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add Vendor
-          </Button>
+          {canWrite && (
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add Vendor
+            </Button>
+          )}
         </div>
       </div>
 

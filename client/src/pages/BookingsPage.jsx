@@ -10,8 +10,12 @@ import DataTable from "../components/DataTable";
 import { SkeletonBlock } from "../components/Feedback";
 import { formatCurrency, formatDate } from "../utils/formatters";
 import StatusBadge from "../components/StatusBadge";
+import { useAuth } from "../context/AuthContext";
 
 export default function BookingsPage() {
+  const { can } = useAuth();
+  const canWrite = can("bookings", "write");
+  const canDelete = can("bookings", "delete");
   const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [packages, setPackages] = useState([]);
@@ -115,19 +119,23 @@ export default function BookingsPage() {
               <Eye className="h-4 w-4" />
             </Button>
           </Link>
-          <Button variant="secondary" className="w-10 px-0" onClick={async () => {
-            const res = await api.get(`/bookings/${r.id}`);
-            setEditing(res.data); setOpen(true);
-          }}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button variant="danger" className="w-10 px-0" onClick={async () => {
-            if (!window.confirm("Delete this booking?")) return;
-            try { await api.delete(`/bookings/${r.id}`); toast.success("Deleted"); load(); }
-            catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
-          }}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {canWrite && (
+            <Button variant="secondary" className="w-10 px-0" onClick={async () => {
+              const res = await api.get(`/bookings/${r.id}`);
+              setEditing(res.data); setOpen(true);
+            }}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+          {canDelete && (
+            <Button variant="danger" className="w-10 px-0" onClick={async () => {
+              if (!window.confirm("Delete this booking?")) return;
+              try { await api.delete(`/bookings/${r.id}`); toast.success("Deleted"); load(); }
+              catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
+            }}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -141,9 +149,11 @@ export default function BookingsPage() {
             <h2 className="text-base font-semibold text-[var(--text)]">Bookings</h2>
             <p className="mt-0.5 text-xs text-[var(--text-soft)]">Search, filter, and sort all package bookings.</p>
           </div>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> New Booking
-          </Button>
+          {canWrite && (
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="h-4 w-4" /> New Booking
+            </Button>
+          )}
         </div>
       </div>
 

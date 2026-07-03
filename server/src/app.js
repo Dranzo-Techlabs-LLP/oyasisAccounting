@@ -7,7 +7,7 @@ import cookieParser from "cookie-parser";
 import express from "express";
 import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/errorHandler.js";
-import { requireAuth } from "./middleware/auth.js";
+import { requireAuth, guardModule } from "./middleware/auth.js";
 import authRoutes from "./routes/auth.js";
 import packageRoutes from "./routes/packages.js";
 import customerRoutes from "./routes/customers.js";
@@ -54,20 +54,22 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
-app.use("/api/packages", requireAuth, packageRoutes);
-app.use("/api/customers", requireAuth, customerRoutes);
-app.use("/api/bookings", requireAuth, bookingRoutes);
-app.use("/api/invoices", requireAuth, invoiceRoutes);
-app.use("/api/dashboard", requireAuth, dashboardRoutes);
-app.use("/api/accounts", requireAuth, accountsRoutes);
-app.use("/api/ticket-sales", requireAuth, ticketSalesRoutes);
-app.use("/api/settings", requireAuth, settingsRoutes);
-app.use("/api/users", requireAuth, usersRoutes);
-app.use("/api/calendar", requireAuth, calendarRoutes);
-app.use("/api/vendors", requireAuth, vendorsRoutes);
-app.use("/api/vendor-invoices", requireAuth, vendorInvoicesRoutes);
-app.use("/api/ledger", requireAuth, ledgerRoutes);
-app.use("/api/roles", requireAuth, rolesRoutes);
+app.use("/api/packages", requireAuth, guardModule("packages"), packageRoutes);
+app.use("/api/customers", requireAuth, guardModule("customers"), customerRoutes);
+app.use("/api/bookings", requireAuth, guardModule("bookings"), bookingRoutes);
+app.use("/api/invoices", requireAuth, guardModule("invoices"), invoiceRoutes);
+app.use("/api/dashboard", requireAuth, guardModule("dashboard"), dashboardRoutes);
+app.use("/api/accounts", requireAuth, guardModule("accounts"), accountsRoutes);
+app.use("/api/ticket-sales", requireAuth, guardModule("ticketSales"), ticketSalesRoutes);
+app.use("/api/settings", requireAuth, guardModule("settings"), settingsRoutes);
+app.use("/api/users", requireAuth, guardModule("users"), usersRoutes);
+app.use("/api/calendar", requireAuth, guardModule("calendar"), calendarRoutes);
+app.use("/api/vendors", requireAuth, guardModule("vendors"), vendorsRoutes);
+app.use("/api/vendor-invoices", requireAuth, guardModule("vendorInvoices"), vendorInvoicesRoutes);
+app.use("/api/ledger", requireAuth, guardModule("ledger"), ledgerRoutes);
+// Roles page reads the catalog (read) and only ADMIN can PUT (enforced in the
+// route). Guard with the "roles" module so non-privileged roles can't poke it.
+app.use("/api/roles", requireAuth, guardModule("roles"), rolesRoutes);
 
 const clientDist = path.resolve(__dirname, "../../client/dist");
 if (fs.existsSync(clientDist)) {

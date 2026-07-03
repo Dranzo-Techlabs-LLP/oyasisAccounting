@@ -8,6 +8,7 @@ import DataTable from "../components/DataTable";
 import StatusBadge from "../components/StatusBadge";
 import { SkeletonBlock } from "../components/Feedback";
 import { formatDate } from "../utils/formatters";
+import { useAuth } from "../context/AuthContext";
 
 const ROLES = [
   ["ADMIN",      "Full access to everything incl Settings + Users"],
@@ -58,6 +59,9 @@ const PRESET_PERMISSIONS = {
 };
 
 export default function UsersPage() {
+  const { can } = useAuth();
+  const canWrite = can("users", "write");
+  const canDelete = can("users", "delete");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -116,16 +120,20 @@ export default function UsersPage() {
       key: "actions", label: "Actions", sortable: false,
       render: (r) => (
         <div className="flex gap-1">
-          <Button variant="secondary" className="w-10 px-0" onClick={() => { setEditing(r); setOpen(true); }}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button variant="danger" className="w-10 px-0" onClick={async () => {
-            if (!window.confirm(`Delete user ${r.email}?`)) return;
-            try { await api.delete(`/users/${r.id}`); toast.success("Deleted"); load(); }
-            catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
-          }}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {canWrite && (
+            <Button variant="secondary" className="w-10 px-0" onClick={() => { setEditing(r); setOpen(true); }}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+          {canDelete && (
+            <Button variant="danger" className="w-10 px-0" onClick={async () => {
+              if (!window.confirm(`Delete user ${r.email}?`)) return;
+              try { await api.delete(`/users/${r.id}`); toast.success("Deleted"); load(); }
+              catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
+            }}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -139,9 +147,11 @@ export default function UsersPage() {
             <h2 className="text-base font-semibold text-[var(--text)]">Users & Roles</h2>
             <p className="mt-0.5 text-xs text-[var(--text-soft)]">Manage team accounts and module-level permissions.</p>
           </div>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add User
-          </Button>
+          {canWrite && (
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add User
+            </Button>
+          )}
         </div>
       </div>
 

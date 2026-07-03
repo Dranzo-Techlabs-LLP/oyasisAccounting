@@ -10,10 +10,14 @@ import InvoiceOptionsModal from "../components/InvoiceOptionsModal";
 import { SkeletonBlock } from "../components/Feedback";
 import { downloadBlob, formatCurrency, formatDate, readBlobText, verifyPdfBlob, viewBlobInNewTab } from "../utils/formatters";
 import StatusBadge from "../components/StatusBadge";
+import { useAuth } from "../context/AuthContext";
 
 const TYPE_ICON = { FLIGHT: Plane, TRAIN: Train, BUS: Bus, CAR: Car, BOAT: Ship, FERRY: Ship, OTHER: Ticket };
 
 export default function TicketSalesPage() {
+  const { can } = useAuth();
+  const canWrite = can("ticketSales", "write");
+  const canDelete = can("ticketSales", "delete");
   const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [filters, setFilters] = useState({ q: "", status: "" });
@@ -103,9 +107,11 @@ export default function TicketSalesPage() {
             <h2 className="text-base font-semibold text-[var(--text)]">Ticket Sales</h2>
             <p className="mt-0.5 text-xs text-[var(--text-soft)]">Search, filter, and sort standalone ticket bookings.</p>
           </div>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> New Sale
-          </Button>
+          {canWrite && (
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="h-4 w-4" /> New Sale
+            </Button>
+          )}
         </div>
       </div>
 
@@ -199,27 +205,31 @@ export default function TicketSalesPage() {
                     <Button variant="secondary" className="w-10 px-0" title="Quick view" onClick={() => setViewing(s)}>
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="secondary" className="w-10 px-0" title="Edit" onClick={async () => {
-                      const res = await api.get(`/ticket-sales/${s.id}`);
-                      setEditing(res.data); setOpen(true);
-                    }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    {canWrite && (
+                      <Button variant="secondary" className="w-10 px-0" title="Edit" onClick={async () => {
+                        const res = await api.get(`/ticket-sales/${s.id}`);
+                        setEditing(res.data); setOpen(true);
+                      }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button variant="secondary" className="w-10 px-0" title="Invoice options" onClick={() => openInvoice(s)}>
                       <FileText className="h-4 w-4" />
                     </Button>
-                    {!s.supplierPaid && (
+                    {canWrite && !s.supplierPaid && (
                       <Button variant="secondary" className="px-2 text-xs" onClick={() => markSupplierPaid(s.id)}>
                         Pay supplier
                       </Button>
                     )}
-                    <Button variant="danger" className="w-10 px-0" title="Delete" onClick={async () => {
-                      if (!window.confirm("Delete this ticket sale?")) return;
-                      try { await api.delete(`/ticket-sales/${s.id}`); toast.success("Deleted"); load(); }
-                      catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
-                    }}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {canDelete && (
+                      <Button variant="danger" className="w-10 px-0" title="Delete" onClick={async () => {
+                        if (!window.confirm("Delete this ticket sale?")) return;
+                        try { await api.delete(`/ticket-sales/${s.id}`); toast.success("Deleted"); load(); }
+                        catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
+                      }}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 )
               }
@@ -312,25 +322,27 @@ export default function TicketSalesPage() {
                         <p className="text-[var(--text-soft)]">{p.method} · {formatDate(p.paymentDate)}</p>
                         {p.note && <p className="mt-1 text-[var(--text-soft)]">{p.note}</p>}
                       </div>
-                      <button
-                        onClick={async () => {
-                          if (!window.confirm("Delete this payment?")) return;
-                          try {
-                            const res = await api.delete(`/ticket-sales/${viewing.id}/payments/${p.id}`);
-                            setViewing(res.data);
-                            load();
-                          } catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
-                        }}
-                        className="rounded-md border border-[var(--line)] p-1.5 text-[var(--text-soft)] hover:text-red-600"
-                        aria-label="Delete payment"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm("Delete this payment?")) return;
+                            try {
+                              const res = await api.delete(`/ticket-sales/${viewing.id}/payments/${p.id}`);
+                              setViewing(res.data);
+                              load();
+                            } catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
+                          }}
+                          className="rounded-md border border-[var(--line)] p-1.5 text-[var(--text-soft)] hover:text-red-600"
+                          aria-label="Delete payment"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
-              {Number(viewing.balanceDue) > 0 && (
+              {canWrite && Number(viewing.balanceDue) > 0 && (
                 <QuickPayment saleId={viewing.id} balance={Number(viewing.balanceDue)} onDone={async () => {
                   const res = await api.get(`/ticket-sales/${viewing.id}`);
                   setViewing(res.data); load();

@@ -42,5 +42,35 @@ export const requirePermission = (module, action = "read") => (req, res, next) =
   const perms = req.user.permissions || {};
   const modPerms = perms[module] || {};
   if (modPerms[action]) return next();
-  return res.status(403).json({ message: `Forbidden: missing ${module}.${action}` });
+  return res.status(403).json({ message: "You don't have permission to perform this action." });
+};
+
+// Map an HTTP request to the permission action it needs:
+//   GET/HEAD                        -> read
+//   POST/PUT/PATCH                  -> write
+//   DELETE of the whole record      -> delete   (path is /:id)
+//   DELETE of a sub-resource        -> write    (path is /:id/xxx/:sub — that's
+//                                                editing the parent, not
+//                                                deleting the record)
+const actionForRequest = (req) => {
+  const method = req.method.toUpperCase();
+  if (method === "GET" || method === "HEAD") return "read";
+  if (method === "DELETE") {
+    const segments = req.path.split("/").filter(Boolean);
+    return segments.length <= 1 ? "delete" : "write";
+  }
+  return "write";
+};
+
+// Mount-level guard for a whole module. Derives the required action from the
+// HTTP method/path and enforces it against the user's role permissions.
+// Admins always pass. Read is required even for GET so hidden modules are
+// fully blocked at the API, not just in the menu.
+export const guardModule = (module) => (req, res, next) => {
+  if (!req.user) return res.status(401).json({ message: "Authentication required" });
+  if (req.user.role === "ADMIN") return next();
+  const action = actionForRequest(req);
+  const modPerms = (req.user.permissions || {})[module] || {};
+  if (modPerms[action]) return next();
+  return res.status(403).json({ message: "You don't have permission to perform this action." });
 };

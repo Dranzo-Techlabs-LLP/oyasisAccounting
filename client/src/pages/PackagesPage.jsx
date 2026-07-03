@@ -8,8 +8,12 @@ import PackageForm from "../components/PackageForm";
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, SkeletonBlock } from "../components/Feedback";
 import { formatCurrency } from "../utils/formatters";
+import { useAuth } from "../context/AuthContext";
 
 export default function PackagesPage() {
+  const { can } = useAuth();
+  const canWrite = can("packages", "write");
+  const canDelete = can("packages", "delete");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -104,9 +108,11 @@ export default function PackagesPage() {
             <option value="asc">Ascending</option>
             <option value="desc">Descending</option>
           </Select>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add
-          </Button>
+          {canWrite && (
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add
+            </Button>
+          )}
         </div>
       </div>
 
@@ -154,21 +160,25 @@ export default function PackagesPage() {
                   </div>
                 </div>
                 <div className="mt-5 flex justify-end gap-2">
-                  <Button variant="secondary" className="w-11 px-0" onClick={() => { setEditing(item); setOpen(true); }}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="danger"
-                    className="w-11 px-0"
-                    onClick={async () => {
-                      if (!window.confirm("Delete this package?")) return;
-                      await api.delete(`/packages/${item.id}`);
-                      toast.success("Package deleted");
-                      load();
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {canWrite && (
+                    <Button variant="secondary" className="w-11 px-0" onClick={() => { setEditing(item); setOpen(true); }}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button
+                      variant="danger"
+                      className="w-11 px-0"
+                      onClick={async () => {
+                        if (!window.confirm("Delete this package?")) return;
+                        await api.delete(`/packages/${item.id}`);
+                        toast.success("Package deleted");
+                        load();
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </article>
