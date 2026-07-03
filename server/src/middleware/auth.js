@@ -1,5 +1,6 @@
 import { verifyToken } from "../utils/tokens.js";
 import { prisma } from "../lib/prisma.js";
+import { getRolePermissions } from "../lib/permissions.js";
 
 export const requireAuth = async (req, res, next) => {
   const token = req.cookies.token;
@@ -11,12 +12,15 @@ export const requireAuth = async (req, res, next) => {
     if (!user || !user.isActive) {
       return res.status(401).json({ message: "Account disabled or missing" });
     }
+    // Permissions are role-based: resolve from the user's role (cached).
+    // ADMIN always resolves to full access.
+    const permissions = await getRolePermissions(user.role);
     req.user = {
       id: user.id,
       email: user.email,
       role: user.role,
       fullName: user.fullName,
-      permissions: user.permissions || {}
+      permissions
     };
     return next();
   } catch {

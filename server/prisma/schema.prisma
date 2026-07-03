@@ -111,6 +111,16 @@ model User {
   auditLogs    AuditLog[]
 }
 
+// One editable permission set per role. Users inherit the rights of their
+// role (ADMIN always has everything, regardless of this table). Managed from
+// the Roles & Rights page.
+model RolePermission {
+  id          Int      @id @default(autoincrement())
+  role        Role     @unique
+  permissions Json
+  updatedAt   DateTime @updatedAt
+}
+
 model Setting {
   id                  Int      @id @default(1)
   businessName        String   @default("OasisGo Holidays")

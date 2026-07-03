@@ -35,15 +35,18 @@ const ITEMS = [
 
 const ADMIN_ITEMS = [
   { key: "users",    to: "/users",    icon: UsersRound, label: "Users" },
+  { key: "roles",    to: "/roles",    icon: Shield,     label: "Roles & Rights" },
   { key: "settings", to: "/settings", icon: Settings,   label: "Settings" }
 ];
 
 const canSeeMenu = (user, key) => {
   if (user?.role === "ADMIN") return true;
-  const map = user?.permissions?.menu;
-  // If no menu map saved yet, default ALLOW (back-compat).
-  if (!map || typeof map !== "object") return true;
-  return map[key] !== false;
+  const perms = user?.permissions;
+  // No permissions resolved yet — hide nothing (avoids a flash of empty nav
+  // before the role permissions load).
+  if (!perms || typeof perms !== "object") return true;
+  // A menu item is visible when the role has View (read) on that module.
+  return Boolean(perms[key]?.read);
 };
 
 export default function Sidebar({ mobileOpen = false, onClose }) {

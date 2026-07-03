@@ -13,6 +13,7 @@ import AccountsPage from "./pages/AccountsPage";
 import TicketSalesPage from "./pages/TicketSalesPage";
 import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
+import RolesRightsPage from "./pages/RolesRightsPage";
 import CalendarPage from "./pages/CalendarPage";
 import VendorsPage from "./pages/VendorsPage";
 import VendorInvoicesPage from "./pages/VendorInvoicesPage";
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />
         <Route path="users" element={<AdminOnly><UsersPage /></AdminOnly>} />
+        <Route path="roles" element={<AdminOnly><RolesRightsPage /></AdminOnly>} />
       </Route>
     </Routes>
   );

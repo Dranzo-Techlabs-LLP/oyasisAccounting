@@ -9,8 +9,8 @@ import { Button, Field, Input } from "../components/FormPrimitives";
 export default function LoginPage() {
   const { user, login } = useAuth();
   const [form, setForm] = useState({
-    email: "admin@oasisgoholidays.com",
-    password: "Admin@123"
+    email: "",
+    password: ""
   });
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);

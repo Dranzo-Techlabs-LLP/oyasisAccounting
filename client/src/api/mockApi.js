@@ -1193,6 +1193,68 @@ export async function mockRequest(method, url, config = {}) {
   }
 
   /* ===================== Settings ===================== */
+  /* ===================== Roles & Rights (demo) ===================== */
+  if (route === "/roles" && method === "get") {
+    const catalog = [
+      { group: "Dashboard", modules: [{ key: "dashboard", label: "View dashboard", actions: ["read"] }] },
+      { group: "Bookings", modules: [
+        { key: "bookings", label: "Bookings", actions: ["read", "write", "delete"] },
+        { key: "calendar", label: "Booking calendar", actions: ["read"] },
+        { key: "overview", label: "Monthly overview", actions: ["read"] }
+      ] },
+      { group: "Ticket Sales", modules: [{ key: "ticketSales", label: "Ticket sales", actions: ["read", "write", "delete"] }] },
+      { group: "Customers & Packages", modules: [
+        { key: "customers", label: "Customers", actions: ["read", "write", "delete"] },
+        { key: "packages", label: "Packages", actions: ["read", "write", "delete"] }
+      ] },
+      { group: "Accounting", modules: [
+        { key: "accounts", label: "Accounts & revenue", actions: ["read", "write"] },
+        { key: "invoices", label: "Invoices", actions: ["read", "write"] },
+        { key: "ledger", label: "Income / Expense", actions: ["read", "write", "delete"] }
+      ] },
+      { group: "Vendors / B2B", modules: [
+        { key: "vendors", label: "Vendors", actions: ["read", "write", "delete"] },
+        { key: "vendorInvoices", label: "B2B invoices", actions: ["read", "write", "delete"] }
+      ] },
+      { group: "Administration", modules: [
+        { key: "users", label: "Users", actions: ["read", "write", "delete"] },
+        { key: "settings", label: "Settings", actions: ["read", "write"] },
+        { key: "roles", label: "Roles & rights", actions: ["read", "write"] }
+      ] }
+    ];
+    const allModules = catalog.flatMap((g) => g.modules);
+    const full = () => Object.fromEntries(allModules.map((m) => [m.key, Object.fromEntries(m.actions.map((a) => [a, true]))]));
+    const readOnly = () => Object.fromEntries(allModules.map((m) => [m.key, { read: true }]));
+    if (!state.rolePermissions) {
+      state.rolePermissions = {
+        MANAGER: full(), ACCOUNTANT: readOnly(), AGENT: readOnly(), VIEWER: readOnly()
+      };
+      saveState(state);
+    }
+    const rp = state.rolePermissions;
+    return createResponse({
+      catalog,
+      actionLabels: { read: "View", write: "Create / Edit", delete: "Delete" },
+      roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "AGENT", "VIEWER"].map((role) => ({
+        role,
+        system: true,
+        editable: role !== "ADMIN",
+        permissions: role === "ADMIN" ? full() : (rp[role] || readOnly())
+      }))
+    });
+  }
+  if (/^\/roles\/[A-Z]+$/.test(route) && method === "put") {
+    const role = route.split("/")[2];
+    state.rolePermissions = state.rolePermissions || {};
+    state.rolePermissions[role] = payload.permissions || {};
+    saveState(state);
+    return createResponse({ role, permissions: state.rolePermissions[role] });
+  }
+  if (/^\/roles\/[A-Z]+\/reset$/.test(route) && method === "post") {
+    const role = route.split("/")[2];
+    return createResponse({ role, permissions: state.rolePermissions?.[role] || {} });
+  }
+
   if (route === "/settings" && method === "get") {
     return createResponse(state.settings);
   }

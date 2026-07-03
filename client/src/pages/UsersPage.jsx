@@ -269,81 +269,14 @@ function UserForm({ initialValues, onSubmit, busy }) {
         </Field>
       </div>
 
-      {/* Sidebar menu visibility */}
-      <div className="rounded-md border border-[var(--line)] bg-white p-4">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text)]">Sidebar Menu Visibility</p>
-            <p className="mt-0.5 text-xs text-[var(--text-soft)]">Pick which menu items appear in the left navigation for this user. Admin sees everything.</p>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setAllMenu(true)} disabled={form.role === "ADMIN"}
-              className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--text-soft)] hover:bg-[var(--surface-muted)] disabled:opacity-40">
-              Show all
-            </button>
-            <button type="button" onClick={() => setAllMenu(false)} disabled={form.role === "ADMIN"}
-              className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--text-soft)] hover:bg-[var(--surface-muted)] disabled:opacity-40">
-              Hide all
-            </button>
-          </div>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {MENU_ITEMS.map(([k, label]) => {
-            const checked = form.role === "ADMIN" ? true : (form.permissions?.menu?.[k] !== false);
-            return (
-              <label key={k}
-                className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition ${
-                  checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--text)]" : "border-[var(--line)] text-[var(--text-soft)] hover:bg-[var(--surface-muted)]"
-                } ${form.role === "ADMIN" ? "cursor-not-allowed opacity-80" : ""}`}>
-                <input type="checkbox" checked={checked} disabled={form.role === "ADMIN"}
-                  onChange={() => toggleMenu(k)}
-                  className="h-4 w-4 rounded border-[var(--line)] text-[var(--brand)] focus:ring-[var(--brand-ring)]" />
-                <span>{label}</span>
-              </label>
-            );
-          })}
-        </div>
-        <p className="mt-2 text-[11px] text-[var(--text-faint)]">
-          Note: <code>Users</code> + <code>Settings</code> appear only for the ADMIN role and aren't togglable.
+      {/* Permissions are now managed per role in Roles & Rights. */}
+      <div className="rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-4">
+        <p className="text-sm font-semibold text-[var(--text)]">Permissions</p>
+        <p className="mt-1 text-xs text-[var(--text-soft)]">
+          This user inherits the rights of the <span className="font-semibold capitalize">{form.role.toLowerCase()}</span> role.
+          To change what this role can see and do, open <a href="/roles" className="font-medium text-[var(--brand)] underline-offset-2 hover:underline">Roles &amp; Rights</a>.
+          The Administrator role always has full access.
         </p>
-      </div>
-
-      <div className="rounded-md border border-[var(--line)] bg-white p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text)]">Module Permissions</p>
-            <p className="mt-0.5 text-xs text-[var(--text-soft)]">Admin always has full access — overrides matrix below.</p>
-          </div>
-          <button type="button" onClick={() => applyPreset(form.role)}
-            className="text-xs font-medium text-[var(--brand)] underline-offset-2 hover:underline">
-            Reset to {form.role} defaults
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-[var(--text-soft)]">
-              <tr>
-                <th className="py-2 font-medium">Module</th>
-                {ACTIONS.map((a) => <th key={a} className="py-2 px-2 text-center font-medium">{a}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {MODULES.map((m) => (
-                <tr key={m} className="border-t border-[var(--line)]">
-                  <td className="py-2 capitalize">{m.replace(/([A-Z])/g, " $1")}</td>
-                  {ACTIONS.map((a) => (
-                    <td key={a} className="py-2 px-2 text-center">
-                      <input type="checkbox"
-                        checked={!!form.permissions?.[m]?.[a]}
-                        disabled={form.role === "ADMIN"}
-                        onChange={() => togglePerm(m, a)} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       <div className="flex justify-end">

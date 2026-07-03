@@ -22,6 +22,7 @@ import calendarRoutes from "./routes/calendar.js";
 import vendorsRoutes from "./routes/vendors.js";
 import vendorInvoicesRoutes from "./routes/vendorInvoices.js";
 import ledgerRoutes from "./routes/ledger.js";
+import rolesRoutes from "./routes/roles.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,6 +67,7 @@ app.use("/api/calendar", requireAuth, calendarRoutes);
 app.use("/api/vendors", requireAuth, vendorsRoutes);
 app.use("/api/vendor-invoices", requireAuth, vendorInvoicesRoutes);
 app.use("/api/ledger", requireAuth, ledgerRoutes);
+app.use("/api/roles", requireAuth, rolesRoutes);
 
 const clientDist = path.resolve(__dirname, "../../client/dist");
 if (fs.existsSync(clientDist)) {

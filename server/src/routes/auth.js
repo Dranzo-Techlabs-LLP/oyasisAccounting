@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { createToken } from "../utils/tokens.js";
 import { requireAuth } from "../middleware/auth.js";
+import { getRolePermissions } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.post("/login", async (req, res) => {
       email: user.email,
       role: user.role,
       fullName: user.fullName,
-      permissions: user.permissions || {}
+      permissions: await getRolePermissions(user.role)
     }
   });
 });
@@ -50,9 +51,10 @@ router.post("/login", async (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user.id },
-    select: { id: true, email: true, role: true, fullName: true, permissions: true }
+    select: { id: true, email: true, role: true, fullName: true }
   });
-  return res.json({ user });
+  // Permissions come from the role, not the user row.
+  return res.json({ user: { ...user, permissions: await getRolePermissions(user.role) } });
 });
 
 router.post("/logout", (_req, res) => {
