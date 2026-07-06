@@ -154,7 +154,7 @@ model Setting {
   vendorInvoicePrefix String   @default("B2B")
   vendorInvoiceNextNumber Int  @default(1)
   vendorInvoiceUseYear    Boolean @default(true)
-  invoiceTerms        String?
+  invoiceTerms        String? @db.Text
   updatedAt           DateTime @updatedAt
 }
 
@@ -196,7 +196,7 @@ model Customer {
   nationality String?
   passportNo  String?
   address     String?
-  notes       String?
+  notes       String? @db.Text
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   bookings    Booking[]
@@ -224,7 +224,7 @@ model Booking {
   balanceDue     Decimal       @db.Decimal(10, 2)
   paymentStatus  PaymentStatus @default(PENDING)
   bookingStatus  BookingStatus @default(CONFIRMED)
-  notes          String?
+  notes          String? @db.Text
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
@@ -250,7 +250,7 @@ model BookingTicket {
   passengers    Int          @default(1)
   amount        Decimal      @db.Decimal(10, 2) @default(0)
   status        TicketStatus @default(BOOKED)
-  note          String?
+  note          String? @db.Text
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   booking       Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -282,7 +282,7 @@ model TicketSale {
   supplierPaidDate DateTime?
   invoiceNumber    String?       @unique
   invoicedAt       DateTime?
-  note             String?
+  note             String? @db.Text
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   customer         Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
@@ -308,7 +308,7 @@ model TicketSalePayment {
   amount       Decimal  @db.Decimal(10, 2)
   paymentDate  DateTime @default(now())
   method       String
-  note         String?
+  note         String? @db.Text
   ticketSale   TicketSale @relation(fields: [ticketSaleId], references: [id], onDelete: Cascade)
 }
 
@@ -321,7 +321,7 @@ model BookingTraveller {
   passportNo String?
   phone      String?
   isPrimary  Boolean  @default(false)
-  note       String?
+  note       String? @db.Text
   createdAt  DateTime @default(now())
   booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
@@ -336,7 +336,7 @@ model BookingPayout {
   dueDate     DateTime?
   paidDate    DateTime?
   reference   String?
-  note        String?
+  note        String? @db.Text
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   booking     Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -360,7 +360,7 @@ model Payment {
   amount      Decimal  @db.Decimal(10, 2)
   paymentDate DateTime @default(now())
   method      String
-  note        String?
+  note        String? @db.Text
   booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
 
@@ -390,7 +390,7 @@ model Vendor {
   gstin           String?
   pan             String?
   openingBalance  Decimal   @db.Decimal(12, 2) @default(0)
-  notes           String?
+  notes           String? @db.Text
   isActive        Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -411,8 +411,8 @@ model VendorInvoice {
   paidAmount        Decimal  @db.Decimal(12, 2) @default(0)
   balanceDue        Decimal  @db.Decimal(12, 2) @default(0)
   currency          String   @default("INR")
-  notes             String?
-  terms             String?
+  notes             String? @db.Text
+  terms             String? @db.Text
   reference         String?
   showGstin         Boolean  @default(true)
   includeBank       Boolean  @default(true)
@@ -448,7 +448,7 @@ model LedgerEntry {
   txDate        DateTime   @default(now())
   paymentMethod String?
   reference     String?
-  notes         String?
+  notes         String? @db.Text
   sourceType    String?
   sourceId      Int?
   createdAt     DateTime   @default(now())
