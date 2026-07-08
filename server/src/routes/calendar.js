@@ -42,6 +42,8 @@ router.get("/", async (req, res) => {
       amount: toNumber(b.totalAmount),
       bookingStatus: b.bookingStatus,
       paymentStatus: b.paymentStatus,
+      bookedBy: b.bookedBy || null,
+      bookedByPartner: b.bookedByPartner || null,
       pax: b.adults + b.children
     })),
     ticketSales: ticketSales.map((s) => ({

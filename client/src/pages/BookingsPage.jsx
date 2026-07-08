@@ -12,6 +12,12 @@ import { formatCurrency, formatDate } from "../utils/formatters";
 import StatusBadge from "../components/StatusBadge";
 import { useAuth } from "../context/AuthContext";
 
+// "B2B Partners (ABC Travels)" for B2B bookings, otherwise the plain name.
+const bookedByLabel = (r) =>
+  r.bookedBy === "B2B Partners" && r.bookedByPartner
+    ? `B2B Partners (${r.bookedByPartner})`
+    : (r.bookedBy || "");
+
 export default function BookingsPage() {
   const { can } = useAuth();
   const canWrite = can("bookings", "write");
@@ -66,6 +72,15 @@ export default function BookingsPage() {
           <p className="text-xs text-[var(--text-soft)]">{r.travelPackage?.destination}</p>
         </div>
       )
+    },
+    {
+      key: "bookedBy", label: "Booked By",
+      accessor: (r) => bookedByLabel(r),
+      filterType: "text",
+      render: (r) => {
+        const label = bookedByLabel(r);
+        return label ? <p className="text-sm text-[var(--text)]">{label}</p> : <span className="text-xs text-[var(--text-faint)]">—</span>;
+      }
     },
     {
       key: "departureDate", label: "Departure",

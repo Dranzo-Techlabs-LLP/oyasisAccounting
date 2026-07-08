@@ -43,6 +43,10 @@ const TICKET_TYPES = [
   ["OTHER", "Other"]
 ];
 
+// "Booked By" options — keep in sync with the server's BOOKED_BY_OPTIONS.
+const BOOKED_BY_OPTIONS = ["Shameer", "Abhijith", "Sahla", "Adithya", "Shahana", "B2B Partners"];
+const B2B_PARTNERS = "B2B Partners";
+
 const initialForm = {
   customerId: "",
   packageId: "",
@@ -56,6 +60,8 @@ const initialForm = {
   discountType: "NONE",
   discountValue: 0,
   bookingStatus: "CONFIRMED",
+  bookedBy: "",
+  bookedByPartner: "",
   notes: "",
   extraCharges: [{ label: "Visa Fees", amount: 0 }],
   installments: [],
@@ -117,6 +123,8 @@ export default function BookingForm({
         packageId: initialValues.packageId || initialValues.travelPackage?.id || "",
         departureDate: initialValues.departureDate?.slice(0, 10) || "",
         endDate: initialValues.endDate?.slice(0, 10) || "",
+        bookedBy: initialValues.bookedBy || "",
+        bookedByPartner: initialValues.bookedByPartner || "",
         adultPriceOverride: initialValues.adultPriceOverride ?? "",
         childPriceOverride: initialValues.childPriceOverride ?? "",
         priceOverrideEnabled: initialValues.adultPriceOverride != null || initialValues.childPriceOverride != null,
@@ -365,6 +373,17 @@ export default function BookingForm({
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
+        // ----- Booked By validation -----
+        if (!form.bookedBy) {
+          setSection("details");
+          toast.error("Please select who booked this (Booked By).");
+          return;
+        }
+        if (form.bookedBy === B2B_PARTNERS && !String(form.bookedByPartner || "").trim()) {
+          setSection("details");
+          toast.error("Please enter the B2B partner name.");
+          return;
+        }
         const allPayments = form.installments
           .map((p) => ({
             ...(p.id ? { id: p.id } : {}),
@@ -432,6 +451,9 @@ export default function BookingForm({
           travellers: allTravellers,
           payouts: allPayouts,
           tickets: allTickets,
+          bookedBy: form.bookedBy,
+          // Only send the partner name for B2B Partners; cleared otherwise.
+          bookedByPartner: form.bookedBy === B2B_PARTNERS ? String(form.bookedByPartner || "").trim() : null,
           amountPaid: allPayments.reduce((sum, p) => sum + p.amount, 0)
         };
         delete payload.installments;
@@ -600,6 +622,36 @@ export default function BookingForm({
                   <option key={item.id} value={item.id}>{item.fullName} - {item.phone}</option>
                 ))}
               </Select>
+            )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Booked By *">
+              <Select
+                value={form.bookedBy}
+                required
+                onChange={(e) => setForm((c) => ({
+                  ...c,
+                  bookedBy: e.target.value,
+                  // Clear the partner name when switching away from B2B Partners.
+                  bookedByPartner: e.target.value === B2B_PARTNERS ? c.bookedByPartner : ""
+                }))}
+              >
+                <option value="">Select who booked</option>
+                {BOOKED_BY_OPTIONS.map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </Select>
+            </Field>
+            {form.bookedBy === B2B_PARTNERS && (
+              <Field label="B2B Partner Name *">
+                <Input
+                  value={form.bookedByPartner}
+                  required
+                  placeholder="e.g. ABC Travels, XYZ Holidays"
+                  onChange={(e) => setForm((c) => ({ ...c, bookedByPartner: e.target.value }))}
+                />
+              </Field>
             )}
           </div>
 

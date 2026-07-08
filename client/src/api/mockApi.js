@@ -751,6 +751,8 @@ export async function mockRequest(method, url, config = {}) {
       balanceDue: Math.max(totalAmount - paidAmount, 0),
       paymentStatus: paidAmount === 0 ? "PENDING" : paidAmount >= totalAmount ? "PAID" : "PARTIAL",
       bookingStatus: payload.bookingStatus,
+      bookedBy: payload.bookedBy || null,
+      bookedByPartner: payload.bookedBy === "B2B Partners" ? (payload.bookedByPartner || null) : null,
       notes: payload.notes,
       travellers: (Array.isArray(payload.travellers) ? payload.travellers : []).map((t) => ({
         id: ++travellerIdSeq,
@@ -965,6 +967,10 @@ export async function mockRequest(method, url, config = {}) {
       paymentStatus:
         paidAmount === 0 ? "PENDING" : paidAmount >= totalAmount ? "PAID" : "PARTIAL",
       bookingStatus: payload.bookingStatus ?? existing.bookingStatus,
+      bookedBy: payload.bookedBy ?? existing.bookedBy ?? null,
+      bookedByPartner: (payload.bookedBy ?? existing.bookedBy) === "B2B Partners"
+        ? (payload.bookedByPartner ?? existing.bookedByPartner ?? null)
+        : null,
       notes: payload.notes ?? existing.notes
     };
     state.bookings = state.bookings.map((b) => (b.id === id ? updated : b));
@@ -1150,6 +1156,8 @@ export async function mockRequest(method, url, config = {}) {
           amount: b.totalAmount,
           bookingStatus: b.bookingStatus,
           paymentStatus: b.paymentStatus,
+          bookedBy: b.bookedBy || null,
+          bookedByPartner: b.bookedByPartner || null,
           pax: (b.adults || 0) + (b.children || 0)
         };
       });
@@ -1640,7 +1648,24 @@ export async function mockRequest(method, url, config = {}) {
     const id = Number(route.split("/")[2]);
     const existing = state.ticketSales.find((s) => s.id === id);
     if (!existing) throw new Error("Ticket sale not found");
+    // Append any new installments sent with the edit (existing ones are locked
+    // in the form and not resent) so added payments actually persist.
+    const newInstallments = (payload.payments || []).filter((p) => Number(p.amount) > 0 && !p.id);
+    for (const p of newInstallments) {
+      state.ticketSalePayments.push({
+        id: state.ticketSalePayments.length + 1,
+        ticketSaleId: id,
+        amount: Number(p.amount || 0),
+        paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString() : new Date().toISOString(),
+        method: p.method || "Cash",
+        note: p.note || ""
+      });
+    }
     const totals = computeTicketSaleTotals(payload, existing);
+    const paidSum = state.ticketSalePayments
+      .filter((p) => p.ticketSaleId === id)
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const paidCapped = Math.min(paidSum, totals.totalAmount);
     const updated = {
       ...existing,
       ...payload,
@@ -1650,12 +1675,13 @@ export async function mockRequest(method, url, config = {}) {
       costPrice: Number(payload.costPrice ?? existing.costPrice ?? 0),
       departAt: payload.departAt ? new Date(payload.departAt).toISOString() : existing.departAt,
       returnAt: payload.returnAt ? new Date(payload.returnAt).toISOString() : existing.returnAt,
-      balanceDue: Math.max(totals.totalAmount - Number(existing.paidAmount || 0), 0)
+      paidAmount: paidCapped,
+      balanceDue: Math.max(totals.totalAmount - paidCapped, 0)
     };
     updated.paymentStatus =
-      Number(existing.paidAmount || 0) >= totals.totalAmount
+      paidCapped >= totals.totalAmount && totals.totalAmount > 0
         ? "PAID"
-        : Number(existing.paidAmount || 0) > 0
+        : paidCapped > 0
           ? "PARTIAL"
           : "PENDING";
     state.ticketSales = state.ticketSales.map((s) => (s.id === id ? updated : s));

@@ -100,6 +100,10 @@ const ticketSchema = z.object({
   note: optionalString
 });
 
+// Allowed "Booked By" options. Keep in sync with the client dropdown.
+export const BOOKED_BY_OPTIONS = ["Shameer", "Abhijith", "Sahla", "Adithya", "Shahana", "B2B Partners"];
+const B2B_PARTNERS = "B2B Partners";
+
 const bookingSchema = z.object({
   customerId: z.coerce.number().int().positive().optional(),
   customer: customerInlineSchema.optional(),
@@ -120,7 +124,26 @@ const bookingSchema = z.object({
   payouts: z.array(payoutSchema).optional(),
   tickets: z.array(ticketSchema).optional(),
   bookingStatus: z.nativeEnum(BookingStatus),
+  // Required: who booked this.
+  bookedBy: z.enum(BOOKED_BY_OPTIONS, { errorMap: () => ({ message: "Booked By is required" }) }),
+  // Only meaningful when bookedBy === "B2B Partners".
+  bookedByPartner: optionalString,
   notes: optionalString
+}).superRefine((data, ctx) => {
+  if (data.bookedBy === B2B_PARTNERS && !String(data.bookedByPartner || "").trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["bookedByPartner"],
+      message: "Partner name is required for B2B Partners"
+    });
+  }
+});
+
+// Resolve the pair of columns to persist: partner name is only kept when the
+// booking is a B2B Partners booking, otherwise it is cleared.
+const resolveBookedBy = (body) => ({
+  bookedBy: body.bookedBy,
+  bookedByPartner: body.bookedBy === B2B_PARTNERS ? String(body.bookedByPartner || "").trim() : null
 });
 
 const paymentSchema = paymentInputSchema.extend({
@@ -368,6 +391,7 @@ router.post("/", async (req, res) => {
       balanceDue: amounts.balanceDue,
       paymentStatus: amounts.paymentStatus,
       bookingStatus: body.bookingStatus,
+      ...resolveBookedBy(body),
       notes: body.notes || null
     },
     include: bookingInclude
@@ -611,6 +635,7 @@ router.put("/:id", async (req, res) => {
               ? PaymentStatus.PARTIAL
               : PaymentStatus.PENDING,
         bookingStatus: body.bookingStatus,
+        ...resolveBookedBy(body),
         notes: body.notes || null
       }
     });

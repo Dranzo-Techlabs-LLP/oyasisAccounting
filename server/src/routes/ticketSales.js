@@ -224,41 +224,70 @@ router.put("/:id", async (req, res) => {
   const existing = await prisma.ticketSale.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: "Ticket sale not found" });
 
-  const amounts = computeAmounts({
-    sellingPrice: body.sellingPrice,
-    serviceFee: body.serviceFee,
-    discountAmount: body.discountAmount,
-    paidAmount: toNumber(existing.paidAmount)
-  });
+  // New installments added during the edit. The form locks existing payments
+  // (managed on the detail page) and only sends brand-new ones here, so we
+  // APPEND these rather than reconcile — previously they were dropped entirely.
+  const newInstallments = (body.payments || []).filter((p) => Number(p.amount) > 0 && !p.id);
 
-  const updated = await prisma.ticketSale.update({
-    where: { id },
-    data: {
-      customerId: body.customerId || existing.customerId,
-      ticketType: body.ticketType,
-      vendor: body.vendor || null,
-      reference: body.reference || null,
-      fromLocation: body.fromLocation || null,
-      toLocation: body.toLocation || null,
-      departAt: body.departAt ? new Date(body.departAt) : null,
-      returnAt: body.returnAt ? new Date(body.returnAt) : null,
-      passengers: body.passengers,
-      costPrice: body.costPrice,
+  const refreshed = await prisma.$transaction(async (tx) => {
+    if (newInstallments.length > 0) {
+      await tx.ticketSalePayment.createMany({
+        data: newInstallments.map((p) => ({
+          ticketSaleId: id,
+          amount: Number(p.amount),
+          paymentDate: new Date(p.paymentDate),
+          method: p.method || "Cash",
+          note: p.note || null
+        }))
+      });
+    }
+
+    // Recompute paid from ALL payment rows (existing + newly added).
+    const rows = await tx.ticketSalePayment.findMany({
+      where: { ticketSaleId: id },
+      select: { amount: true }
+    });
+    const paidSum = rows.reduce((s, r) => s + toNumber(r.amount), 0);
+
+    const amounts = computeAmounts({
       sellingPrice: body.sellingPrice,
       serviceFee: body.serviceFee,
-      discountAmount: amounts.discountAmount,
-      totalAmount: amounts.totalAmount,
-      balanceDue: amounts.balanceDue,
-      paymentStatus: amounts.paymentStatus,
-      status: body.status,
-      supplierName: body.supplierName || null,
-      supplierPaid: !!body.supplierPaid,
-      supplierPaidDate: body.supplierPaidDate ? new Date(body.supplierPaidDate) : null,
-      note: body.note || null
-    },
-    include: includeAll
+      discountAmount: body.discountAmount,
+      paidAmount: paidSum
+    });
+
+    await tx.ticketSale.update({
+      where: { id },
+      data: {
+        customerId: body.customerId || existing.customerId,
+        ticketType: body.ticketType,
+        vendor: body.vendor || null,
+        reference: body.reference || null,
+        fromLocation: body.fromLocation || null,
+        toLocation: body.toLocation || null,
+        departAt: body.departAt ? new Date(body.departAt) : null,
+        returnAt: body.returnAt ? new Date(body.returnAt) : null,
+        passengers: body.passengers,
+        costPrice: body.costPrice,
+        sellingPrice: body.sellingPrice,
+        serviceFee: body.serviceFee,
+        discountAmount: amounts.discountAmount,
+        totalAmount: amounts.totalAmount,
+        paidAmount: amounts.paidAmount,
+        balanceDue: amounts.balanceDue,
+        paymentStatus: amounts.paymentStatus,
+        status: body.status,
+        supplierName: body.supplierName || null,
+        supplierPaid: !!body.supplierPaid,
+        supplierPaidDate: body.supplierPaidDate ? new Date(body.supplierPaidDate) : null,
+        note: body.note || null
+      }
+    });
+
+    return tx.ticketSale.findUnique({ where: { id }, include: includeAll });
   });
-  res.json(serialize(updated));
+
+  res.json(serialize(refreshed));
 });
 
 router.post("/:id/payments", async (req, res) => {

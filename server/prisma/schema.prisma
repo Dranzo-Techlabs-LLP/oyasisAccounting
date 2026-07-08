@@ -224,6 +224,12 @@ model Booking {
   balanceDue     Decimal       @db.Decimal(10, 2)
   paymentStatus  PaymentStatus @default(PENDING)
   bookingStatus  BookingStatus @default(CONFIRMED)
+  // Who booked this. One of the fixed staff names or "B2B Partners".
+  // Nullable in the DB so existing rows stay valid; required at the API layer
+  // for new/edited bookings.
+  bookedBy        String?
+  // When bookedBy is "B2B Partners", the partner/company name.
+  bookedByPartner String?
   notes          String? @db.Text
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

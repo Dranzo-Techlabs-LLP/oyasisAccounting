@@ -255,6 +255,14 @@ export default function BookingDetailPage() {
                 <p className="mt-1 text-sm text-[var(--text-soft)]">
                   {item.travelPackage.destination} · {formatDate(item.departureDate)}{item.endDate ? ` → ${formatDate(item.endDate)}` : ""}
                 </p>
+                {item.bookedBy && (
+                  <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-medium text-[var(--text)]">
+                    <UserPlus className="h-3.5 w-3.5 text-[var(--text-soft)]" />
+                    Booked by: {item.bookedBy === "B2B Partners" && item.bookedByPartner
+                      ? `B2B Partners (${item.bookedByPartner})`
+                      : item.bookedBy}
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge value={item.bookingStatus} />

@@ -15,6 +15,38 @@ const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const BOOKING_COLOR = "bg-emerald-100 text-emerald-800 ring-emerald-300";
 const TICKET_COLOR  = "bg-sky-100 text-sky-800 ring-sky-300";
 
+// ---------------------------------------------------------------------------
+// Calendar event colours by "Booked By".
+//
+// To add a new team member + colour in the future, add ONE entry here keyed
+// by the exact "Booked By" value. Each entry has:
+//   chip   - the pill classes for the event (light bg + dark text = readable)
+//   border - the left/outline border on the day-detail card
+//   dot    - the little status dot shown before the name
+// Any Tailwind colour family works (e.g. teal/pink/indigo) — just follow the
+// 100 / 800 / 300 / 500 shade pattern below.
+// ---------------------------------------------------------------------------
+const BOOKED_BY_COLORS = {
+  "Shameer":      { chip: "bg-emerald-100 text-emerald-800 ring-emerald-300", border: "border-emerald-300", dot: "bg-emerald-500" },
+  "Abhijith":     { chip: "bg-blue-100 text-blue-800 ring-blue-300",          border: "border-blue-300",    dot: "bg-blue-500" },
+  "Sahla":        { chip: "bg-red-100 text-red-800 ring-red-300",             border: "border-red-300",     dot: "bg-red-500" },
+  "Adithya":      { chip: "bg-purple-100 text-purple-800 ring-purple-300",    border: "border-purple-300",  dot: "bg-purple-500" },
+  "Shahana":      { chip: "bg-orange-100 text-orange-800 ring-orange-300",    border: "border-orange-300",  dot: "bg-orange-500" },
+  "B2B Partners": { chip: "bg-yellow-100 text-yellow-800 ring-yellow-300",    border: "border-yellow-300",  dot: "bg-yellow-500" }
+};
+
+// Fallback for bookings with no "Booked By" (older records) — original green.
+const DEFAULT_BOOKING_COLORS = { chip: BOOKING_COLOR, border: "border-emerald-300", dot: "bg-emerald-500" };
+const TICKET_COLORS = { chip: TICKET_COLOR, border: "border-sky-300", dot: "bg-sky-500" };
+
+// Resolve the colour set for any calendar event. Ticket sales keep their blue;
+// bookings are coloured by Booked By (B2B Partners is always yellow, whatever
+// partner name was typed).
+const eventColors = (ev) => {
+  if (ev.kind !== "booking") return TICKET_COLORS;
+  return BOOKED_BY_COLORS[ev.bookedBy] || DEFAULT_BOOKING_COLORS;
+};
+
 export default function CalendarPage() {
   const navigate = useNavigate();
   const [month, setMonth] = useState(dayjs().format("YYYY-MM"));
@@ -147,14 +179,18 @@ export default function CalendarPage() {
                     )}
                   </div>
                   <div className="space-y-1">
-                    {events.slice(0, 3).map((ev) => (
-                      <div key={`${ev.kind}-${ev.id}`}
-                        className={`truncate rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ${ev.kind === "booking" ? BOOKING_COLOR : TICKET_COLOR}`}
-                        title={`${ev.code} · ${ev.customer || ""} · ${ev.title || ""}`}
-                      >
-                        {ev.kind === "booking" ? "🟢" : "🔵"} {ev.customer || ev.title}
-                      </div>
-                    ))}
+                    {events.slice(0, 3).map((ev) => {
+                      const colors = eventColors(ev);
+                      return (
+                        <div key={`${ev.kind}-${ev.id}`}
+                          className={`flex items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ${colors.chip}`}
+                          title={`${ev.code} · ${ev.customer || ""} · ${ev.title || ""}${ev.kind === "booking" && ev.bookedBy ? ` · Booked by ${ev.bookedBy === "B2B Partners" && ev.bookedByPartner ? `B2B Partners (${ev.bookedByPartner})` : ev.bookedBy}` : ""}`}
+                        >
+                          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${colors.dot}`} />
+                          <span className="truncate">{ev.customer || ev.title}</span>
+                        </div>
+                      );
+                    })}
                     {events.length > 3 && (
                       <div className="text-[10px] font-medium text-[var(--text-soft)]">+ {events.length - 3} more</div>
                     )}
@@ -169,7 +205,9 @@ export default function CalendarPage() {
       <Modal open={!!dayDetail} onClose={() => setDayDetail(null)} title={dayDetail ? dayjs(dayDetail.date).format("dddd, DD MMM YYYY") : ""} width="max-w-2xl">
         {dayDetail && (
           <div className="space-y-2">
-            {dayDetail.events.map((ev) => (
+            {dayDetail.events.map((ev) => {
+              const colors = eventColors(ev);
+              return (
               <button
                 key={`${ev.kind}-${ev.id}`}
                 onClick={() => {
@@ -177,15 +215,20 @@ export default function CalendarPage() {
                   if (ev.kind === "booking") navigate(`/bookings/${ev.id}`);
                   else navigate(`/ticket-sales`);
                 }}
-                className={`block w-full rounded-md border p-3 text-left transition hover:bg-[var(--surface-muted)] ${ev.kind === "booking" ? "border-emerald-300" : "border-sky-300"}`}
+                className={`block w-full rounded-md border p-3 text-left transition hover:bg-[var(--surface-muted)] ${colors.border}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ring-1 ${ev.kind === "booking" ? BOOKING_COLOR : TICKET_COLOR}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ring-1 ${colors.chip}`}>
                         {ev.kind === "booking" ? "Booking" : "Ticket Sale"}
                       </span>
                       <span className="text-sm font-semibold text-[var(--text)]">{ev.code}</span>
+                      {ev.kind === "booking" && ev.bookedBy && (
+                        <span className="text-[10px] font-medium text-[var(--text-soft)]">
+                          · {ev.bookedBy === "B2B Partners" && ev.bookedByPartner ? `B2B Partners (${ev.bookedByPartner})` : ev.bookedBy}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-sm text-[var(--text)]">{ev.title}</p>
                     <p className="text-xs text-[var(--text-soft)]">
@@ -211,7 +254,8 @@ export default function CalendarPage() {
                   </div>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </Modal>
