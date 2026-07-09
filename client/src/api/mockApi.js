@@ -1648,18 +1648,32 @@ export async function mockRequest(method, url, config = {}) {
     const id = Number(route.split("/")[2]);
     const existing = state.ticketSales.find((s) => s.id === id);
     if (!existing) throw new Error("Ticket sale not found");
-    // Append any new installments sent with the edit (existing ones are locked
-    // in the form and not resent) so added payments actually persist.
-    const newInstallments = (payload.payments || []).filter((p) => Number(p.amount) > 0 && !p.id);
-    for (const p of newInstallments) {
-      state.ticketSalePayments.push({
-        id: state.ticketSalePayments.length + 1,
-        ticketSaleId: id,
-        amount: Number(p.amount || 0),
-        paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString() : new Date().toISOString(),
-        method: p.method || "Cash",
-        note: p.note || ""
-      });
+    // Reconcile the full payments list from the edit form: rows with an id are
+    // updated in place, rows without an id are created, and existing rows not
+    // in the payload are deleted. Mirrors the server so edit/delete persist.
+    if (Array.isArray(payload.payments)) {
+      const submitted = payload.payments.filter((p) => Number(p.amount) > 0);
+      const keepIds = submitted.map((p) => Number(p.id)).filter((n) => Number.isFinite(n) && n > 0);
+      state.ticketSalePayments = state.ticketSalePayments.filter(
+        (p) => p.ticketSaleId !== id || keepIds.includes(p.id)
+      );
+      let nextId = state.ticketSalePayments.reduce((m, p) => Math.max(m, p.id), 0);
+      for (const p of submitted) {
+        const data = {
+          amount: Number(p.amount || 0),
+          paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString() : new Date().toISOString(),
+          method: p.method || "UPI",
+          note: p.note || ""
+        };
+        const pid = Number(p.id);
+        if (pid > 0) {
+          state.ticketSalePayments = state.ticketSalePayments.map((row) =>
+            row.id === pid && row.ticketSaleId === id ? { ...row, ...data } : row
+          );
+        } else {
+          state.ticketSalePayments.push({ id: ++nextId, ticketSaleId: id, ...data });
+        }
+      }
     }
     const totals = computeTicketSaleTotals(payload, existing);
     const paidSum = state.ticketSalePayments

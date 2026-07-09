@@ -21,6 +21,9 @@ const TICKET_TYPES = [
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// Payment methods — mirrors the booking form / Add Payment modal. UPI default.
+const PAYMENT_METHODS = ["UPI", "Cash", "Bank Transfer", "Card", "Cheque", "Other"];
+
 const initial = {
   customerId: "",
   ticketType: "FLIGHT",
@@ -64,11 +67,20 @@ export default function TicketSaleForm({ customers, initialValues, onSubmit, bus
         departAt: initialValues.departAt ? String(initialValues.departAt).slice(0, 16) : "",
         returnAt: initialValues.returnAt ? String(initialValues.returnAt).slice(0, 16) : "",
         supplierPaidDate: initialValues.supplierPaidDate ? String(initialValues.supplierPaidDate).slice(0, 10) : "",
-        installments: (initialValues.payments || []).map((p) => ({
-          id: p.id, amount: p.amount,
-          paymentDate: p.paymentDate ? String(p.paymentDate).slice(0, 10) : todayISO(),
-          method: p.method, note: p.note || "", locked: true
-        }))
+        // Sort oldest-first, and keep them editable (no locked flag) so the
+        // user can amend or remove existing payments from the edit dialog.
+        installments: (initialValues.payments || [])
+          .slice()
+          .sort((a, b) => {
+            const d = new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0);
+            if (d !== 0) return d;
+            return Number(a.id || 0) - Number(b.id || 0);
+          })
+          .map((p) => ({
+            id: p.id, amount: p.amount,
+            paymentDate: p.paymentDate ? String(p.paymentDate).slice(0, 10) : todayISO(),
+            method: p.method || "UPI", note: p.note || ""
+          }))
       });
       setExistingAttachments(initialValues.attachments || []);
       setPendingFiles([]);
@@ -164,14 +176,23 @@ export default function TicketSaleForm({ customers, initialValues, onSubmit, bus
   const removeInstallment = (idx) =>
     setForm((c) => ({ ...c, installments: c.installments.filter((_, i) => i !== idx) }));
   const addInstallment = () =>
-    setForm((c) => ({ ...c, installments: [...c.installments, { amount: "", paymentDate: todayISO(), method: "Cash", note: "" }] }));
+    setForm((c) => ({ ...c, installments: [...c.installments, { amount: "", paymentDate: todayISO(), method: "UPI", note: "" }] }));
 
   return (
     <form className="grid gap-4" onSubmit={(e) => {
       e.preventDefault();
-      const newPayments = form.installments
-        .filter((p) => !p.locked && Number(p.amount) > 0)
-        .map((p) => ({ amount: Number(p.amount), paymentDate: p.paymentDate || todayISO(), method: p.method || "Cash", note: p.note || "" }));
+      // Send the FULL payments list: existing rows keep their id (edited in
+      // place), new rows omit it (created). The server reconciles — anything
+      // not sent is deleted — so users can add, edit, or remove installments.
+      const allPayments = form.installments
+        .filter((p) => Number(p.amount) > 0)
+        .map((p) => ({
+          ...(p.id ? { id: Number(p.id) } : {}),
+          amount: Number(p.amount),
+          paymentDate: p.paymentDate || todayISO(),
+          method: p.method || "UPI",
+          note: p.note || ""
+        }));
       const payload = {
         ...form,
         customerId: newCustomer ? undefined : Number(form.customerId),
@@ -183,7 +204,7 @@ export default function TicketSaleForm({ customers, initialValues, onSubmit, bus
         departAt: form.departAt || null,
         returnAt: form.returnAt || null,
         supplierPaidDate: form.supplierPaidDate || null,
-        payments: newPayments
+        payments: allPayments
       };
       delete payload.installments;
       payload._pendingFiles = pendingFiles;
@@ -290,11 +311,13 @@ export default function TicketSaleForm({ customers, initialValues, onSubmit, bus
           <div className="space-y-2">
             {form.installments.map((p, i) => (
               <div key={p.id ?? `np-${i}`} className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-3 lg:grid-cols-[140px_150px_140px_1fr_44px]">
-                <Input type="number" min="0" placeholder="Amount" value={p.amount} disabled={p.locked} onChange={(e) => updateInstallment(i, { amount: e.target.value })} />
-                <Input type="date" value={p.paymentDate} disabled={p.locked} onChange={(e) => updateInstallment(i, { paymentDate: e.target.value })} />
-                <Input placeholder="Method" value={p.method} disabled={p.locked} onChange={(e) => updateInstallment(i, { method: e.target.value })} />
-                <Input placeholder="Note" value={p.note} disabled={p.locked} onChange={(e) => updateInstallment(i, { note: e.target.value })} />
-                <button type="button" disabled={p.locked} onClick={() => removeInstallment(i)} aria-label="Remove"
+                <Input type="number" min="0" placeholder="Amount" value={p.amount} onChange={(e) => updateInstallment(i, { amount: e.target.value })} />
+                <Input type="date" value={p.paymentDate} onChange={(e) => updateInstallment(i, { paymentDate: e.target.value })} />
+                <Select value={p.method || "UPI"} onChange={(e) => updateInstallment(i, { method: e.target.value })}>
+                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                </Select>
+                <Input placeholder="Note" value={p.note} onChange={(e) => updateInstallment(i, { note: e.target.value })} />
+                <button type="button" onClick={() => removeInstallment(i)} aria-label="Remove"
                   className="flex h-11 items-center justify-center rounded-md border border-[var(--line)] bg-white text-[var(--text-soft)] hover:text-red-600 disabled:opacity-40">
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -302,7 +325,6 @@ export default function TicketSaleForm({ customers, initialValues, onSubmit, bus
             ))}
           </div>
         )}
-        {isEdit && <p className="mt-2 text-xs text-[var(--text-soft)]">Existing payments are read-only here. Add/delete from the detail page.</p>}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

@@ -44,9 +44,11 @@ const customerInlineSchema = z.object({
 });
 
 const paymentInputSchema = z.object({
+  // id present -> update that row in place; absent -> create a new payment.
+  id: z.coerce.number().int().positive().optional(),
   amount: z.coerce.number().positive(),
   paymentDate: z.string(),
-  method: z.string().min(1).default("Cash"),
+  method: z.string().min(1).default("UPI"),
   note: optionalString
 });
 
@@ -224,25 +226,36 @@ router.put("/:id", async (req, res) => {
   const existing = await prisma.ticketSale.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: "Ticket sale not found" });
 
-  // New installments added during the edit. The form locks existing payments
-  // (managed on the detail page) and only sends brand-new ones here, so we
-  // APPEND these rather than reconcile — previously they were dropped entirely.
-  const newInstallments = (body.payments || []).filter((p) => Number(p.amount) > 0 && !p.id);
-
+  // The form now sends the FULL payments list: rows with an id are kept
+  // (and edited in place), rows without an id are created, and any existing
+  // payment missing from the list is deleted. So a user can add, edit, or
+  // remove installments from the edit dialog.
   const refreshed = await prisma.$transaction(async (tx) => {
-    if (newInstallments.length > 0) {
-      await tx.ticketSalePayment.createMany({
-        data: newInstallments.map((p) => ({
+    if (Array.isArray(body.payments)) {
+      const submitted = body.payments.filter((p) => Number(p.amount) > 0);
+      const keepIds = submitted.map((p) => Number(p.id)).filter((n) => Number.isFinite(n) && n > 0);
+      await tx.ticketSalePayment.deleteMany({
+        where: {
           ticketSaleId: id,
+          ...(keepIds.length > 0 ? { id: { notIn: keepIds } } : {})
+        }
+      });
+      for (const p of submitted) {
+        const data = {
           amount: Number(p.amount),
           paymentDate: new Date(p.paymentDate),
-          method: p.method || "Cash",
+          method: p.method || "UPI",
           note: p.note || null
-        }))
-      });
+        };
+        if (Number(p.id) > 0) {
+          await tx.ticketSalePayment.update({ where: { id: Number(p.id) }, data });
+        } else {
+          await tx.ticketSalePayment.create({ data: { ...data, ticketSaleId: id } });
+        }
+      }
     }
 
-    // Recompute paid from ALL payment rows (existing + newly added).
+    // Recompute paid from the reconciled payment rows.
     const rows = await tx.ticketSalePayment.findMany({
       where: { ticketSaleId: id },
       select: { amount: true }
