@@ -71,8 +71,17 @@ app.use("/api/ledger", requireAuth, guardModule("ledger"), ledgerRoutes);
 // route). Guard with the "roles" module so non-privileged roles can't poke it.
 app.use("/api/roles", requireAuth, guardModule("roles"), rolesRoutes);
 
-const clientDist = path.resolve(__dirname, "../../client/dist");
-if (fs.existsSync(clientDist)) {
+// Locate the built frontend. Supports both the monorepo/dev layout
+// (server/src + client/dist siblings) and the flat deploy layout
+// (public_html/{src,public}). First candidate with an index.html wins.
+const clientDistCandidates = [
+  path.resolve(__dirname, "../../client/dist"), // dev / monorepo
+  path.resolve(__dirname, "../public"),         // flat deploy: public_html/{src,public}
+  path.resolve(__dirname, "../client/dist"),
+  path.resolve(process.cwd(), "public")
+];
+const clientDist = clientDistCandidates.find((p) => fs.existsSync(path.join(p, "index.html")));
+if (clientDist) {
   app.use(express.static(clientDist));
   app.get(/^(?!\/api\/).*/, (_req, res) => {
     res.sendFile(path.join(clientDist, "index.html"));
