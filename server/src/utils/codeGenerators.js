@@ -65,19 +65,48 @@ export const nextVendorInvoiceNumber = async (prisma) => {
   return candidate;
 };
 
-export const nextInvoiceNumber = async (prisma) => {
-  const s = await getSettings();
+// Build the invoice-number string for a given sequence number, honouring the
+// configured prefix and the "include year" setting. Shared by both the
+// booking-derived and the fall-back running-sequence generators.
+const invoiceFormatter = (s) => {
   const prefix = s.invoicePrefix || "OGH";
   const useYear = s.invoiceUseYear !== false;
-  const start = s.invoiceNextNumber || (await prisma.invoice.count()) + 1;
   const year = dayjs().year();
-  const format = (n) => (useYear ? `${prefix}-${year}-${pad(n, 4)}` : `${prefix}-${pad(n, 4)}`);
+  return (n) => (useYear ? `${prefix}-${year}-${pad(n, 4)}` : `${prefix}-${pad(n, 4)}`);
+};
+
+// Pull the trailing sequence number out of a code like "BK-00054" -> 54.
+// Uses the LAST digit group so codes with a year segment still work.
+export const sequenceFromCode = (code) => {
+  const groups = String(code || "").match(/\d+/g);
+  if (!groups || groups.length === 0) return null;
+  const n = Number(groups[groups.length - 1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+export const nextInvoiceNumber = async (prisma) => {
+  const s = await getSettings();
+  const start = s.invoiceNextNumber || (await prisma.invoice.count()) + 1;
   const { num, candidate } = await findFreeNumber(
     start,
-    format,
+    invoiceFormatter(s),
     async (c) => Boolean(await prisma.invoice.findUnique({ where: { invoiceNumber: c } }))
   );
   await prisma.setting.update({ where: { id: 1 }, data: { invoiceNextNumber: num + 1 } });
   invalidateSettings();
   return candidate;
+};
+
+// Invoice numbers mirror the booking they belong to, so the two are trivially
+// easy to match up: booking BK-00054 -> invoice OGH-2026-0054. If that exact
+// number is somehow already taken (e.g. an older sequentially-numbered invoice
+// claimed it first) we fall back to the running sequence rather than fail.
+export const invoiceNumberForBooking = async (prisma, booking) => {
+  const seq = sequenceFromCode(booking?.bookingCode);
+  if (seq !== null) {
+    const candidate = invoiceFormatter(await getSettings())(seq);
+    const taken = await prisma.invoice.findUnique({ where: { invoiceNumber: candidate } });
+    if (!taken) return candidate;
+  }
+  return nextInvoiceNumber(prisma);
 };

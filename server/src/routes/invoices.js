@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { buildInvoicePdf } from "../services/invoicePdf.js";
-import { nextInvoiceNumber } from "../utils/codeGenerators.js";
+import { invoiceNumberForBooking } from "../utils/codeGenerators.js";
 
 const router = Router();
 
@@ -29,7 +29,8 @@ const ensureInvoice = async (bookingId) => {
   await prisma.invoice.create({
     data: {
       bookingId,
-      invoiceNumber: await nextInvoiceNumber(prisma)
+      // Mirror the booking code so BK-00054 -> OGH-2026-0054.
+      invoiceNumber: await invoiceNumberForBooking(prisma, booking)
     }
   });
 

@@ -3,6 +3,15 @@ const AUTH_KEY = "oasisgo_mock_auth";
 
 const today = new Date();
 
+// Pull the trailing sequence number out of a code like "BK-00054" -> 54, so an
+// invoice can mirror its booking's number. Mirrors the server helper.
+const seqFromCode = (code) => {
+  const groups = String(code || "").match(/\d+/g);
+  if (!groups || groups.length === 0) return null;
+  const n = Number(groups[groups.length - 1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
 const createSeedState = () => {
   const packages = [
     {
@@ -127,7 +136,7 @@ const createSeedState = () => {
   const invoices = bookings.slice(0, 7).map((booking, index) => ({
     id: index + 1,
     bookingId: booking.id,
-    invoiceNumber: `OGH-2026-${String(index + 1).padStart(4, "0")}`,
+    invoiceNumber: `OGH-2026-${String(seqFromCode(booking.bookingCode) ?? index + 1).padStart(4, "0")}`,
     issuedDate: new Date(new Date(booking.departureDate).getTime() - 86400000 * 18).toISOString(),
     sentStatus: index % 2 === 0
   }));
@@ -1055,10 +1064,14 @@ export async function mockRequest(method, url, config = {}) {
     const bookingId = Number(route.split("/")[2]);
     let invoice = state.invoices.find((item) => item.bookingId === bookingId);
     if (!invoice) {
+      // Mirror the booking code so BK-00054 -> OGH-2026-0054 (same as server).
+      const bk = state.bookings.find((b) => b.id === bookingId);
+      const seq = seqFromCode(bk?.bookingCode) ?? state.invoices.length + 1;
+      const prefix = state.settings.invoicePrefix || "OGH";
       invoice = {
         id: state.invoices.length + 1,
         bookingId,
-        invoiceNumber: `OGH-2026-${String(state.invoices.length + 1).padStart(4, "0")}`,
+        invoiceNumber: `${prefix}-${new Date().getFullYear()}-${String(seq).padStart(4, "0")}`,
         issuedDate: new Date().toISOString(),
         sentStatus: false
       };
@@ -1098,7 +1111,8 @@ export async function mockRequest(method, url, config = {}) {
     const html = buildInvoiceHtml({
       title: "Tax Invoice",
       settings: state.settings,
-      invoiceNumber: booking.invoice?.invoiceNumber || `OGH-${new Date().getFullYear()}-${String(bookingId).padStart(4, "0")}`,
+      invoiceNumber: booking.invoice?.invoiceNumber
+        || `${state.settings.invoicePrefix || "OGH"}-${new Date().getFullYear()}-${String(seqFromCode(booking.bookingCode) ?? bookingId).padStart(4, "0")}`,
       invoiceDate: booking.invoice?.issuedDate || new Date().toISOString(),
       refLabel: "Booking",
       refValue: booking.bookingCode,
