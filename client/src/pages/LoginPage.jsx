@@ -33,11 +33,52 @@ export default function LoginPage() {
       <section
         className="relative hidden overflow-hidden px-10 py-12 text-white lg:flex lg:flex-col lg:justify-between xl:px-14"
         style={{
+          // NOTE: plain CSS here, not a Tailwind arbitrary value — colour stops
+          // must be separated by a real space. An underscore ("#1d3a6e_45%")
+          // invalidates the whole multi-layer `background`, which left this
+          // panel white with unreadable white text.
           background:
-            "radial-gradient(circle at top right, rgba(240,136,38,0.22), transparent 40%), radial-gradient(circle at bottom left, rgba(169,212,233,0.14), transparent 38%), linear-gradient(140deg,#162a52,#1d3a6e_45%,#2a4f93)"
+            "radial-gradient(circle at top right, rgba(240,136,38,0.22), transparent 40%), radial-gradient(circle at bottom left, rgba(169,212,233,0.14), transparent 38%), linear-gradient(140deg, #162a52 0%, #1d3a6e 45%, #2a4f93 100%)"
         }}
       >
-        <div className="flex items-center gap-3">
+        {/* Decorative travel motif — dotted flight arcs between destinations.
+            Purely presentational, sits behind the content at low opacity so it
+            never competes with the text. */}
+        <svg
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox="0 0 600 700"
+          preserveAspectRatio="xMidYMid slice"
+          fill="none"
+        >
+          <g stroke="#ffffff" strokeLinecap="round">
+            <g opacity="0.16" strokeWidth="1.5" strokeDasharray="5 9">
+              <path d="M-20 250 C 140 120, 340 140, 520 60" />
+              <path d="M40 470 C 190 380, 330 430, 620 300" />
+              <path d="M-40 620 C 120 610, 260 520, 430 560" />
+            </g>
+            <g opacity="0.1" strokeWidth="1">
+              <circle cx="300" cy="350" r="180" />
+              <circle cx="300" cy="350" r="270" />
+              <ellipse cx="300" cy="350" rx="95" ry="180" />
+            </g>
+          </g>
+          <g fill="#ffffff">
+            <g opacity="0.5">
+              <circle cx="140" cy="181" r="3.5" />
+              <circle cx="520" cy="60" r="3.5" />
+              <circle cx="330" cy="430" r="3.5" />
+              <circle cx="430" cy="560" r="3.5" />
+            </g>
+            <g opacity="0.16">
+              <circle cx="140" cy="181" r="9" />
+              <circle cx="520" cy="60" r="9" />
+              <circle cx="330" cy="430" r="9" />
+            </g>
+          </g>
+        </svg>
+
+        <div className="relative flex items-center gap-3">
           <img src={logoSrc} alt={businessName} className="h-14 w-14 rounded-[12px] bg-white object-contain p-1.5 ring-1 ring-white/20" />
           <div>
             <p className="text-xl font-semibold">{businessName}</p>
@@ -45,8 +86,12 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="max-w-xl">
-          <h1 className="text-4xl font-semibold leading-tight xl:text-5xl">
+        <div className="relative max-w-xl">
+          {/* text-white! (important) is deliberate: index.css sets a global
+              `h1 { color: var(--text) }` OUTSIDE any cascade layer, and
+              unlayered rules beat Tailwind's `@layer utilities` no matter the
+              specificity. Without the `!` the heading renders dark-on-dark. */}
+          <h1 className="text-4xl font-semibold leading-tight text-white! xl:text-5xl">
             Keep every departure, invoice, and customer story in one calm place.
           </h1>
           <p className="mt-5 text-sm text-white/75 sm:text-base">
@@ -54,7 +99,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="grid max-w-xl grid-cols-3 gap-3">
+        <div className="relative grid max-w-xl grid-cols-3 gap-3">
           {[
             ["1-click", "Invoice PDF"],
             ["Live", "Calendar view"],
