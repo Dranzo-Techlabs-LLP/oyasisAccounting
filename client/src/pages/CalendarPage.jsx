@@ -184,9 +184,12 @@ export default function CalendarPage() {
                       return (
                         <div key={`${ev.kind}-${ev.id}`}
                           className={`flex items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ${colors.chip}`}
-                          title={`${ev.code} · ${ev.customer || ""} · ${ev.title || ""}${ev.kind === "booking" && ev.bookedBy ? ` · Booked by ${ev.bookedBy === "B2B Partners" && ev.bookedByPartner ? `B2B Partners (${ev.bookedByPartner})` : ev.bookedBy}` : ""}`}
+                          title={`${ev.kind === "ticketSale" ? "Flight · " : ""}${ev.code} · ${ev.customer || ""} · ${ev.title || ""}${ev.kind === "booking" && ev.bookedBy ? ` · Booked by ${ev.bookedBy === "B2B Partners" && ev.bookedByPartner ? `B2B Partners (${ev.bookedByPartner})` : ev.bookedBy}` : ""}`}
                         >
-                          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${colors.dot}`} />
+                          {/* Flight tickets get a plane icon; bookings keep the colour dot. */}
+                          {ev.kind === "ticketSale"
+                            ? <Plane className="h-2.5 w-2.5 shrink-0" />
+                            : <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${colors.dot}`} />}
                           <span className="truncate">{ev.customer || ev.title}</span>
                         </div>
                       );
@@ -221,7 +224,8 @@ export default function CalendarPage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ring-1 ${colors.chip}`}>
-                        {ev.kind === "booking" ? "Booking" : "Ticket Sale"}
+                        {ev.kind === "ticketSale" && <Plane className="h-3 w-3" />}
+                        {ev.kind === "booking" ? "Booking" : "Flight"}
                       </span>
                       <span className="text-sm font-semibold text-[var(--text)]">{ev.code}</span>
                       {ev.kind === "booking" && ev.bookedBy && (
