@@ -18,15 +18,6 @@ const bookedByLabel = (r) =>
     ? `B2B Partners (${r.bookedByPartner})`
     : (r.bookedBy || "");
 
-// Rank-badge styling for the agent leaderboard: gold / silver / bronze for the
-// top three, neutral for the rest.
-const RANK_STYLES = [
-  "bg-yellow-100 text-yellow-800 ring-yellow-300",
-  "bg-slate-100 text-slate-700 ring-slate-300",
-  "bg-orange-100 text-orange-800 ring-orange-300"
-];
-const rankStyle = (i) => RANK_STYLES[i] || "bg-[var(--surface-muted)] text-[var(--text-soft)] ring-[var(--line)]";
-
 export default function BookingsPage() {
   const { can } = useAuth();
   const canWrite = can("bookings", "write");
@@ -53,7 +44,6 @@ export default function BookingsPage() {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [items]);
-  const topCount = agentLeaderboard[0]?.count || 0;
 
   const load = async () => {
     setLoading(true);
@@ -200,42 +190,6 @@ export default function BookingsPage() {
         </div>
       </div>
 
-      {!loading && (
-        <div className="panel rounded-lg p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Trophy className="h-4 w-4 text-[var(--brand)]" />
-            <h3 className="text-sm font-semibold text-[var(--text)]">Bookings by Agent</h3>
-            <span className="text-xs text-[var(--text-soft)]">· ranked by total bookings</span>
-          </div>
-          {agentLeaderboard.length === 0 ? (
-            <p className="rounded-md bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--text-soft)]">
-              No bookings have a “Booked By” agent yet. Set it on a booking and agents will be ranked here.
-            </p>
-          ) : (
-            <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {agentLeaderboard.map((a, i) => (
-                <li key={a.name} className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-white px-3 py-2">
-                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-1 ${rankStyle(i)}`}>
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium text-[var(--text)]">{a.name}</span>
-                      <span className="shrink-0 text-sm font-semibold text-[var(--text)]">
-                        {a.count} <span className="text-xs font-normal text-[var(--text-soft)]">{a.count === 1 ? "booking" : "bookings"}</span>
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
-                      <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${topCount ? (a.count / topCount) * 100 : 0}%` }} />
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      )}
-
       {loading ? (
         <SkeletonBlock className="h-96" />
       ) : (
@@ -247,6 +201,31 @@ export default function BookingsPage() {
             searchKeys={["bookingCode", "customer.fullName", "travelPackage.name", "travelPackage.destination"]}
             emptyMessage="No bookings match the current filters."
           />
+        </div>
+      )}
+
+      {!loading && (
+        <div className="panel rounded-lg p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-[var(--brand)]" />
+            <h3 className="text-sm font-semibold text-[var(--text)]">Bookings by Agent</h3>
+          </div>
+          {agentLeaderboard.length === 0 ? (
+            <p className="rounded-md bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--text-soft)]">
+              No bookings have a “Booked By” agent yet. Set it on a booking and agents will be ranked here.
+            </p>
+          ) : (
+            <ol className="divide-y divide-[var(--line)]">
+              {agentLeaderboard.map((a, i) => (
+                <li key={a.name} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <span className="truncate text-[var(--text)]">
+                    <span className="mr-2 text-[var(--text-soft)]">{i + 1}.</span>{a.name}
+                  </span>
+                  <span className="shrink-0 font-semibold text-[var(--text)]">{a.count}</span>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       )}
 
