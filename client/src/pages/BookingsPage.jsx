@@ -19,9 +19,10 @@ const bookedByLabel = (r) =>
     : (r.bookedBy || "");
 
 export default function BookingsPage() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canWrite = can("bookings", "write");
   const canDelete = can("bookings", "delete");
+  const isAdmin = user?.role === "ADMIN";
   const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [packages, setPackages] = useState([]);
@@ -204,7 +205,7 @@ export default function BookingsPage() {
         </div>
       )}
 
-      {!loading && (
+      {!loading && isAdmin && (
         <div className="panel rounded-lg p-4">
           <div className="mb-3 flex items-center gap-2">
             <Trophy className="h-4 w-4 text-[var(--brand)]" />
