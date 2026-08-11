@@ -30,16 +30,18 @@ export default function VendorInvoicesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [a, b, c] = await Promise.all([
+      // B2B invoices is primary; vendors/bookings feed the form's dropdowns.
+      // Settle independently so lacking read on vendors or bookings doesn't
+      // blank out the invoice list. Only the primary failure is surfaced.
+      const [a, b, c] = await Promise.allSettled([
         api.get("/vendor-invoices"),
         api.get("/vendors"),
         api.get("/bookings")
       ]);
-      setItems(a.data.items);
-      setVendors(b.data.items);
-      setBookings(c.data.items || []);
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Failed to load");
+      if (a.status === "fulfilled") setItems(a.value.data.items);
+      else toast.error(a.reason?.response?.data?.message || "Failed to load");
+      if (b.status === "fulfilled") setVendors(b.value.data.items);
+      if (c.status === "fulfilled") setBookings(c.value.data.items || []);
     } finally { setLoading(false); }
   };
 

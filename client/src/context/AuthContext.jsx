@@ -33,6 +33,27 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // Re-sync the signed-in user (and their role permissions) when the tab
+  // regains focus. Permissions are role-based and an admin may change them
+  // while a user is already logged in; without this the user would keep stale
+  // rights — e.g. an agent just granted "Bookings: Create/Edit" wouldn't see
+  // the edit button until a manual full reload. Silent: never logs the user
+  // out on a transient error, only refreshes on success.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      api.get("/auth/me")
+        .then((response) => setUser((prev) => (prev ? response.data.user : prev)))
+        .catch(() => { /* keep current session on transient failure */ });
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   const value = useMemo(
     () => ({
       user,

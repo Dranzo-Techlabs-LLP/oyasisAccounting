@@ -33,16 +33,19 @@ export default function BookingsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [bookingRes, customerRes, packageRes] = await Promise.all([
+      // Bookings is the primary resource; customers/packages are only needed to
+      // populate the create/edit form. Settle independently so a role that can
+      // view bookings but lacks customers/packages read (a 403 on those) still
+      // gets the list instead of an empty page. Only the primary error surfaces.
+      const [bookingRes, customerRes, packageRes] = await Promise.allSettled([
         api.get("/bookings"),
         api.get("/customers"),
         api.get("/packages")
       ]);
-      setItems(bookingRes.data.items);
-      setCustomers(customerRes.data.items);
-      setPackages(packageRes.data.items);
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Failed to load bookings");
+      if (bookingRes.status === "fulfilled") setItems(bookingRes.value.data.items);
+      else toast.error(bookingRes.reason?.response?.data?.message || "Failed to load bookings");
+      if (customerRes.status === "fulfilled") setCustomers(customerRes.value.data.items);
+      if (packageRes.status === "fulfilled") setPackages(packageRes.value.data.items);
     } finally {
       setLoading(false);
     }

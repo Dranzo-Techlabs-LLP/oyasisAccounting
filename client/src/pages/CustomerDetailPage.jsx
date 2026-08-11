@@ -15,18 +15,16 @@ export default function CustomerDetailPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const [cRes, bRes] = await Promise.all([
+        // The customer is primary; their booking history is secondary. Settle
+        // independently so a role that can read customers but not bookings
+        // still sees the customer instead of a blank "not found" page.
+        const [cRes, bRes] = await Promise.allSettled([
           api.get(`/customers/${customerId}`),
           api.get(`/bookings`, { params: { customerId } })
         ]);
         if (cancelled) return;
-        setCustomer(cRes.data?.customer ?? cRes.data ?? null);
-        setBookings(bRes.data?.items ?? []);
-      } catch {
-        if (!cancelled) {
-          setCustomer(null);
-          setBookings([]);
-        }
+        setCustomer(cRes.status === "fulfilled" ? (cRes.value.data?.customer ?? cRes.value.data ?? null) : null);
+        setBookings(bRes.status === "fulfilled" ? (bRes.value.data?.items ?? []) : []);
       } finally {
         if (!cancelled) setLoading(false);
       }
