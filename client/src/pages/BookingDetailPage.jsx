@@ -105,16 +105,18 @@ export default function BookingDetailPage() {
   };
 
   const loadFormDeps = async () => {
-    try {
-      const [c, p, s] = await Promise.all([
-        api.get("/customers"),
-        api.get("/packages"),
-        api.get("/settings")
-      ]);
-      setCustomers(c.data.items || []);
-      setPackages(p.data.items || []);
-      setSettings(s.data);
-    } catch { /* non-fatal */ }
+    // Load each dependency independently: a non-admin (e.g. AGENT) may lack
+    // read access to /settings, and a single 403 must NOT discard the
+    // customers/packages lists the edit form needs — otherwise both dropdowns
+    // render empty. Promise.all would reject on the first failure; settle each.
+    const [c, p, s] = await Promise.allSettled([
+      api.get("/customers"),
+      api.get("/packages"),
+      api.get("/settings")
+    ]);
+    if (c.status === "fulfilled") setCustomers(c.value.data.items || []);
+    if (p.status === "fulfilled") setPackages(p.value.data.items || []);
+    if (s.status === "fulfilled") setSettings(s.value.data);
   };
 
   const buildInvoiceUrl = (opts, inline) => {

@@ -32,16 +32,20 @@ export default function TicketSalesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [salesRes, customerRes, settingsRes] = await Promise.all([
+      // Settle independently: a non-admin (e.g. AGENT) can't read /settings,
+      // and that single 403 must not wipe out the ticket list or the customer
+      // dropdown the form needs. Only surface an error if a core list failed.
+      const [salesRes, customerRes, settingsRes] = await Promise.allSettled([
         api.get("/ticket-sales"),
         api.get("/customers"),
         api.get("/settings")
       ]);
-      setItems(salesRes.data.items);
-      setCustomers(customerRes.data.items);
-      setSettings(settingsRes.data);
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Failed to load");
+      if (salesRes.status === "fulfilled") setItems(salesRes.value.data.items);
+      if (customerRes.status === "fulfilled") setCustomers(customerRes.value.data.items);
+      if (settingsRes.status === "fulfilled") setSettings(settingsRes.value.data);
+      if (salesRes.status === "rejected") {
+        toast.error(salesRes.reason?.response?.data?.message || "Failed to load");
+      }
     } finally {
       setLoading(false);
     }
