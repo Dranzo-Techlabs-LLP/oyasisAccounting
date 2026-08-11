@@ -27,12 +27,12 @@ const TICKET_COLOR  = "bg-sky-100 text-sky-800 ring-sky-300";
 // 100 / 800 / 300 / 500 shade pattern below.
 // ---------------------------------------------------------------------------
 const BOOKED_BY_COLORS = {
-  "Shameer":      { chip: "bg-emerald-100 text-emerald-800 ring-emerald-300", border: "border-emerald-300", dot: "bg-emerald-500" },
-  "Abhijith":     { chip: "bg-blue-100 text-blue-800 ring-blue-300",          border: "border-blue-300",    dot: "bg-blue-500" },
-  "Sahla":        { chip: "bg-red-100 text-red-800 ring-red-300",             border: "border-red-300",     dot: "bg-red-500" },
-  "Adithya":      { chip: "bg-purple-100 text-purple-800 ring-purple-300",    border: "border-purple-300",  dot: "bg-purple-500" },
-  "Shahana":      { chip: "bg-orange-100 text-orange-800 ring-orange-300",    border: "border-orange-300",  dot: "bg-orange-500" },
-  "B2B Partners": { chip: "bg-yellow-100 text-yellow-800 ring-yellow-300",    border: "border-yellow-300",  dot: "bg-yellow-500" }
+  "Shameer":      { color: "Green",  chip: "bg-emerald-100 text-emerald-800 ring-emerald-300", border: "border-emerald-300", dot: "bg-emerald-500" },
+  "Abhijith":     { color: "Blue",   chip: "bg-blue-100 text-blue-800 ring-blue-300",          border: "border-blue-300",    dot: "bg-blue-500" },
+  "Sahla":        { color: "Red",    chip: "bg-red-100 text-red-800 ring-red-300",             border: "border-red-300",     dot: "bg-red-500" },
+  "Adithya":      { color: "Purple", chip: "bg-purple-100 text-purple-800 ring-purple-300",    border: "border-purple-300",  dot: "bg-purple-500" },
+  "Shahana":      { color: "Orange", chip: "bg-orange-100 text-orange-800 ring-orange-300",    border: "border-orange-300",  dot: "bg-orange-500" },
+  "B2B Partners": { color: "Yellow", chip: "bg-yellow-100 text-yellow-800 ring-yellow-300",    border: "border-yellow-300",  dot: "bg-yellow-500" }
 };
 
 // Fallback for bookings with no "Booked By" (older records) — original green.
@@ -201,6 +201,27 @@ export default function CalendarPage() {
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Colour key: which "Booked By" agent each colour represents. */}
+      {!loading && (
+        <div className="panel rounded-lg p-4">
+          <h3 className="mb-3 text-sm font-semibold text-[var(--text)]">Booked By — colour key</h3>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {Object.entries(BOOKED_BY_COLORS).map(([name, c]) => (
+              <div key={name} className="flex items-center gap-2 text-sm">
+                <span className={`inline-block h-3 w-3 shrink-0 rounded-full ${c.dot}`} />
+                <span className="text-[var(--text)]">{name}</span>
+                <span className="text-xs text-[var(--text-soft)]">({c.color})</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 text-sm">
+              <span className={`inline-block h-3 w-3 shrink-0 rounded-full ${TICKET_COLORS.dot}`} />
+              <span className="text-[var(--text)]">Flight ticket</span>
+              <span className="text-xs text-[var(--text-soft)]">(Sky blue)</span>
+            </div>
           </div>
         </div>
       )}
