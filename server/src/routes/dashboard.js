@@ -1,4 +1,4 @@
-import { BookingStatus, Prisma } from "@prisma/client";
+import { BookingStatus } from "@prisma/client";
 import dayjs from "dayjs";
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
@@ -6,68 +6,81 @@ import { toNumber } from "../utils/formatters.js";
 
 const router = Router();
 
-router.get("/summary", async (_req, res) => {
-  const monthStart = dayjs().startOf("month").toDate();
-  const monthEnd = dayjs().endOf("month").toDate();
-  const nextWeek = dayjs().add(7, "day").endOf("day").toDate();
-  const sixMonthsStart = dayjs().subtract(5, "month").startOf("month").toDate();
+// Resolve the reporting window from the query.
+//   ?all=1              -> no date constraint (all time)
+//   ?from=YYYY-MM-DD&to=YYYY-MM-DD -> that inclusive span
+//   (nothing)          -> the current calendar month (previous default)
+// The dashboard filters records by their entry date (createdAt) so "revenue in
+// range" means the value of bookings/tickets entered in that period; ledger and
+// vendor invoices use their own date columns.
+const resolveRange = (query) => {
+  if (query.all === "1" || query.all === "true") {
+    return { all: true, from: null, to: null, label: "All time" };
+  }
+  const from = query.from ? dayjs(query.from).startOf("day") : dayjs().startOf("month");
+  const to = query.to ? dayjs(query.to).endOf("day") : dayjs().endOf("month");
+  return { all: false, from: from.toDate(), to: to.toDate() };
+};
+
+router.get("/summary", async (req, res) => {
+  const range = resolveRange(req.query);
+  // Filter helpers: when "all time", the where-clause fragment is empty.
+  const on = (field) => (range.all ? {} : { [field]: { gte: range.from, lte: range.to } });
+  const created = on("createdAt");
 
   const [
-    bookingsThisMonth,
-    revenueThisMonthAgg,
+    bookingsInRange,
+    revenueAgg,
     pendingAgg,
-    upcomingCount,
+    departuresInRange,
     recentBookings,
-    allBookings,
-    ticketSalesThisMonth,
+    rangeBookings,
+    ticketSalesInRange,
     ticketRevenueAgg,
     ticketPendingAgg,
     ticketMarginAgg
   ] = await Promise.all([
-    prisma.booking.count({ where: { createdAt: { gte: monthStart, lte: monthEnd } } }),
-    prisma.booking.aggregate({
-      where: { createdAt: { gte: monthStart, lte: monthEnd } },
-      _sum: { totalAmount: true }
-    }),
-    prisma.booking.aggregate({ _sum: { balanceDue: true } }),
-    prisma.booking.count({
-      where: { departureDate: { gte: dayjs().startOf("day").toDate(), lte: nextWeek } }
-    }),
+    prisma.booking.count({ where: { ...created } }),
+    prisma.booking.aggregate({ where: { ...created }, _sum: { totalAmount: true } }),
+    // Outstanding customer balance for bookings entered in the range.
+    prisma.booking.aggregate({ where: { ...created }, _sum: { balanceDue: true } }),
+    // Departures that fall inside the window (by travel date).
+    prisma.booking.count({ where: { ...on("departureDate") } }),
     prisma.booking.findMany({
+      where: { ...created },
       take: 10,
       orderBy: { createdAt: "desc" },
       include: { customer: true, travelPackage: true }
     }),
     prisma.booking.findMany({
-      where: { createdAt: { gte: sixMonthsStart } },
+      where: { ...created },
       include: { travelPackage: true }
     }),
-    prisma.ticketSale.count({ where: { createdAt: { gte: monthStart, lte: monthEnd } } }),
-    prisma.ticketSale.aggregate({
-      where: { createdAt: { gte: monthStart, lte: monthEnd } },
-      _sum: { totalAmount: true, costPrice: true }
-    }),
-    prisma.ticketSale.aggregate({ _sum: { balanceDue: true } }),
-    prisma.ticketSale.aggregate({
-      _sum: { totalAmount: true, costPrice: true }
-    })
+    prisma.ticketSale.count({ where: { ...created } }),
+    prisma.ticketSale.aggregate({ where: { ...created }, _sum: { totalAmount: true, costPrice: true } }),
+    prisma.ticketSale.aggregate({ where: { ...created }, _sum: { balanceDue: true } }),
+    prisma.ticketSale.aggregate({ where: { ...created }, _sum: { totalAmount: true, costPrice: true } })
   ]);
 
-  const [payoutAggAll, payoutAggPending, supplierPendingTicketsAgg, vendorInvoiceAgg, vendorInvoicePendingAgg, ledgerAgg] = await Promise.all([
-    prisma.bookingPayout.aggregate({ _sum: { amount: true } }),
-    prisma.bookingPayout.aggregate({ where: { status: "PENDING" }, _sum: { amount: true } }),
-    prisma.ticketSale.aggregate({ where: { supplierPaid: false }, _sum: { costPrice: true } }),
+  const [
+    payoutAggAll,
+    payoutAggPending,
+    supplierPendingTicketsAgg,
+    vendorInvoiceAgg,
+    vendorInvoicePendingAgg,
+    ledgerAgg
+  ] = await Promise.all([
+    prisma.bookingPayout.aggregate({ where: { ...created }, _sum: { amount: true } }),
+    prisma.bookingPayout.aggregate({ where: { status: "PENDING", ...created }, _sum: { amount: true } }),
+    prisma.ticketSale.aggregate({ where: { supplierPaid: false, ...created }, _sum: { costPrice: true } }),
+    prisma.vendorInvoice.aggregate({ where: { ...created }, _sum: { totalAmount: true, paidAmount: true } }),
     prisma.vendorInvoice.aggregate({
-      where: { issueDate: { gte: monthStart, lte: monthEnd } },
-      _sum: { totalAmount: true, paidAmount: true }
-    }),
-    prisma.vendorInvoice.aggregate({
-      where: { status: { in: ["SENT", "OVERDUE", "DRAFT"] } },
+      where: { status: { in: ["SENT", "OVERDUE", "DRAFT"] }, ...created },
       _sum: { balanceDue: true }
     }),
     prisma.ledgerEntry.groupBy({
       by: ["kind"],
-      where: { txDate: { gte: monthStart, lte: monthEnd } },
+      where: { ...on("txDate") },
       _sum: { amount: true }
     })
   ]);
@@ -84,7 +97,7 @@ router.get("/summary", async (_req, res) => {
   };
   const packageCounts = new Map();
 
-  allBookings.forEach((booking) => {
+  rangeBookings.forEach((booking) => {
     const month = dayjs(booking.createdAt).format("MMM YY");
     revenueByMonthMap.set(month, (revenueByMonthMap.get(month) || 0) + toNumber(booking.totalAmount));
     statusCounts[booking.bookingStatus] += 1;
@@ -94,24 +107,22 @@ router.get("/summary", async (_req, res) => {
     );
   });
 
-  const revenueByMonth = Array.from(revenueByMonthMap.entries()).map(([month, revenue]) => ({
-    month,
-    revenue
-  }));
+  // Order the revenue-by-month buckets chronologically.
+  const revenueByMonth = Array.from(revenueByMonthMap.entries())
+    .map(([month, revenue]) => ({ month, revenue, _k: dayjs(month, "MMM YY").valueOf() }))
+    .sort((a, b) => a._k - b._k)
+    .map(({ month, revenue }) => ({ month, revenue }));
 
-  const bookingStatuses = Object.entries(statusCounts).map(([status, value]) => ({
-    status,
-    value
-  }));
+  const bookingStatuses = Object.entries(statusCounts).map(([status, value]) => ({ status, value }));
 
   const topPackages = Array.from(packageCounts.entries())
     .map(([name, bookings]) => ({ name, bookings }))
     .sort((a, b) => b.bookings - a.bookings)
     .slice(0, 5);
 
-  const ticketRevenueMonth = toNumber(ticketRevenueAgg._sum.totalAmount);
-  const ticketMarginAll = toNumber(ticketMarginAgg._sum.totalAmount) - toNumber(ticketMarginAgg._sum.costPrice);
-  const bookingRevenueMonth = toNumber(revenueThisMonthAgg._sum.totalAmount);
+  const ticketRevenue = toNumber(ticketRevenueAgg._sum.totalAmount);
+  const ticketMargin = toNumber(ticketMarginAgg._sum.totalAmount) - toNumber(ticketMarginAgg._sum.costPrice);
+  const bookingRevenue = toNumber(revenueAgg._sum.totalAmount);
   const bookingPending = toNumber(pendingAgg._sum.balanceDue);
   const ticketPending = toNumber(ticketPendingAgg._sum.balanceDue);
   const payoutsAll = toNumber(payoutAggAll._sum.amount);
@@ -119,31 +130,34 @@ router.get("/summary", async (_req, res) => {
   const supplierTicketPending = toNumber(supplierPendingTicketsAgg._sum.costPrice);
 
   res.json({
+    range: {
+      all: range.all,
+      from: range.from ? dayjs(range.from).format("YYYY-MM-DD") : null,
+      to: range.to ? dayjs(range.to).format("YYYY-MM-DD") : null
+    },
     kpis: {
-      bookingsThisMonth,
-      revenueThisMonth: bookingRevenueMonth,
+      // The keys keep their historical names (…ThisMonth) so nothing else that
+      // reads them breaks; they now reflect the SELECTED range.
+      bookingsThisMonth: bookingsInRange,
+      revenueThisMonth: bookingRevenue,
       pendingPayments: bookingPending,
-      upcomingDepartures: upcomingCount,
-      ticketSalesThisMonth,
-      ticketRevenueThisMonth: ticketRevenueMonth,
+      upcomingDepartures: departuresInRange,
+      ticketSalesThisMonth: ticketSalesInRange,
+      ticketRevenueThisMonth: ticketRevenue,
       ticketPending,
-      ticketMargin: ticketMarginAll,
-      // combined
-      totalRevenueThisMonth: bookingRevenueMonth + ticketRevenueMonth,
+      ticketMargin,
+      totalRevenueThisMonth: bookingRevenue + ticketRevenue,
       totalCustomerPending: bookingPending + ticketPending,
       supplierPayoutsAll: payoutsAll,
       supplierPayoutsPending: payoutsPending + supplierTicketPending,
-      // vendor invoices (B2B)
       vendorInvoicedThisMonth: toNumber(vendorInvoiceAgg._sum.totalAmount),
       vendorCollectedThisMonth: toNumber(vendorInvoiceAgg._sum.paidAmount),
       vendorOutstanding: toNumber(vendorInvoicePendingAgg._sum.balanceDue),
-      // ledger this month
       ledgerIncomeThisMonth: manualIncome,
       ledgerExpenseThisMonth: manualExpense,
-      // headline: total income (booking+ticket+manual) vs total expense (payouts paid this month + manual)
-      incomeThisMonth: bookingRevenueMonth + ticketRevenueMonth + manualIncome,
+      incomeThisMonth: bookingRevenue + ticketRevenue + manualIncome,
       expenseThisMonth: manualExpense,
-      netThisMonth: (bookingRevenueMonth + ticketRevenueMonth + manualIncome) - manualExpense
+      netThisMonth: (bookingRevenue + ticketRevenue + manualIncome) - manualExpense
     },
     recentBookings: recentBookings.map((booking) => ({
       id: booking.id,

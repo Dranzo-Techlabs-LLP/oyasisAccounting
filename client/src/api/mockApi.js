@@ -557,17 +557,17 @@ const computeAccounts = (state, params) => {
   return { month, year, summary, invoices };
 };
 
-const dashboardSummary = (state) => {
+const dashboardSummary = (state, range = {}) => {
+  // range: { all, from, to } (from/to are YYYY-MM-DD). Default: current month.
   const now = new Date();
-  const bookingsThisMonth = state.bookings.filter((item) => {
-    const created = new Date(item.createdAt);
-    return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
-  });
-  const upcoming = state.bookings.filter((item) => {
-    const departure = new Date(item.departureDate);
-    return departure >= now && departure <= new Date(Date.now() + 86400000 * 7);
-  });
-  const recentBookings = state.bookings
+  const fromD = range.all ? null : new Date(range.from || new Date(now.getFullYear(), now.getMonth(), 1));
+  const toD = range.all ? null : new Date(`${range.to || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)}T23:59:59`);
+  const inRange = (d) => range.all || (new Date(d) >= fromD && new Date(d) <= toD);
+
+  const rangeBookings = state.bookings.filter((item) => inRange(item.createdAt));
+  const bookingsThisMonth = rangeBookings;
+  const upcoming = state.bookings.filter((item) => inRange(item.departureDate));
+  const recentBookings = rangeBookings
     .slice()
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 10)
@@ -588,26 +588,27 @@ const dashboardSummary = (state) => {
     });
 
   const monthlyRevenueMap = new Map();
-  state.bookings.forEach((item) => {
+  rangeBookings.forEach((item) => {
     const label = new Date(item.createdAt).toLocaleString("en-US", { month: "short", year: "2-digit" });
     monthlyRevenueMap.set(label, (monthlyRevenueMap.get(label) || 0) + item.totalAmount);
   });
 
   const statusCounts = ["CONFIRMED", "TENTATIVE", "CANCELLED", "COMPLETED"].map((status) => ({
     status,
-    value: state.bookings.filter((item) => item.bookingStatus === status).length
+    value: rangeBookings.filter((item) => item.bookingStatus === status).length
   }));
 
   const packageCount = state.packages.map((pkg) => ({
     name: pkg.name,
-    bookings: state.bookings.filter((item) => item.packageId === pkg.id).length
+    bookings: rangeBookings.filter((item) => item.packageId === pkg.id).length
   }));
 
   return {
+    range: { all: !!range.all, from: range.from || null, to: range.to || null },
     kpis: {
       bookingsThisMonth: bookingsThisMonth.length,
       revenueThisMonth: bookingsThisMonth.reduce((sum, item) => sum + item.totalAmount, 0),
-      pendingPayments: state.bookings.reduce((sum, item) => sum + item.balanceDue, 0),
+      pendingPayments: rangeBookings.reduce((sum, item) => sum + item.balanceDue, 0),
       upcomingDepartures: upcoming.length
     },
     recentBookings,
@@ -648,8 +649,10 @@ export async function mockRequest(method, url, config = {}) {
     return createResponse({ message: "Logged out" });
   }
 
-  if (route === "/dashboard/summary") {
-    return createResponse(dashboardSummary(state));
+  if (route.startsWith("/dashboard/summary")) {
+    const qs = new URLSearchParams(route.split("?")[1] || "");
+    const range = { all: qs.get("all") === "1", from: qs.get("from"), to: qs.get("to") };
+    return createResponse(dashboardSummary(state, range));
   }
 
   if (route === "/packages" && method === "get") {
