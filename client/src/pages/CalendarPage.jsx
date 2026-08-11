@@ -116,7 +116,7 @@ export default function CalendarPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div>
             <h2 className="text-base font-semibold text-[var(--text)]">Calendar</h2>
-            <p className="mt-0.5 text-xs text-[var(--text-soft)]">Bookings (green) + Ticket Sales (blue) by departure date.</p>
+            <p className="mt-0.5 text-xs text-[var(--text-soft)]">Bookings (green) + Flight tickets (blue) by departure date.</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={goPrev} className="rounded-md border border-[var(--line)] p-2 hover:bg-[var(--surface-muted)]" aria-label="Previous">
@@ -140,7 +140,7 @@ export default function CalendarPage() {
           <label className="inline-flex items-center gap-1.5">
             <input type="checkbox" checked={show.ticketSales} onChange={(e) => setShow({ ...show, ticketSales: e.target.checked })} />
             <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 ring-1 ${TICKET_COLOR}`}>
-              <Plane className="h-3 w-3" /> Ticket sales <span className="font-semibold">({data?.ticketSales?.length ?? 0})</span>
+              <Plane className="h-3 w-3" /> Flight tickets <span className="font-semibold">({data?.ticketSales?.length ?? 0})</span>
             </span>
           </label>
           <span className="text-[var(--text-soft)]">{totalEvents} total events</span>

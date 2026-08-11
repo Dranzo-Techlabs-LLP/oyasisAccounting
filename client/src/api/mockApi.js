@@ -1177,7 +1177,8 @@ export async function mockRequest(method, url, config = {}) {
       });
 
     const ticketSales = (state.ticketSales || [])
-      .filter((s) => inRange(s.departAt || s.departureDate))
+      // Only FLIGHT tickets show on the calendar (matches the server).
+      .filter((s) => inRange(s.departAt || s.departureDate) && s.ticketType === "FLIGHT")
       .map((s) => {
         const customer = state.customers.find((c) => c.id === s.customerId);
         return {

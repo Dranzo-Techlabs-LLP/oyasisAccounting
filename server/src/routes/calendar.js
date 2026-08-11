@@ -22,7 +22,9 @@ router.get("/", async (req, res) => {
       orderBy: { departureDate: "asc" }
     }),
     prisma.ticketSale.findMany({
-      where: { departAt: { gte: start, lte: end } },
+      // Only FLIGHT tickets belong on the calendar; other transport types
+      // (train, bus, car, …) are excluded by request.
+      where: { departAt: { gte: start, lte: end }, ticketType: "FLIGHT" },
       include: { customer: true },
       orderBy: { departAt: "asc" }
     })
