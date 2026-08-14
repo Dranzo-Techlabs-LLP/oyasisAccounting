@@ -195,8 +195,18 @@ const friendlyPrismaMessage = (err) => {
       return "One of the values is not in the expected format.";
     case "P2011":
       return "A required field was left empty.";
-    default:
+    case "P2024":
+      // Connection pool timeout — the DB was busy/unreachable for a moment.
+      return "The server is busy right now. Please wait a moment and try again.";
+    case "P2028":
+      return "The request timed out. Please try again.";
+    case "P2034":
+      // Genuine write conflict / deadlock — retrying usually succeeds.
       return "Couldn't save changes due to a data conflict. Please try again.";
+    default:
+      // Unknown code: stay neutral. The old default wrongly said "save changes"
+      // even for read-only actions like login.
+      return "Something went wrong. Please try again.";
   }
 };
 
@@ -211,7 +221,11 @@ export const errorHandler = (err, req, res, next) => {
 
   // ----- Prisma -----
   if (isPrismaKnownRequestError(err)) {
-    const status = err.code === "P2025" ? 404 : err.code === "P2002" ? 409 : 400;
+    const status =
+      err.code === "P2025" ? 404 :
+      (err.code === "P2002" || err.code === "P2034") ? 409 :
+      (err.code === "P2024" || err.code === "P2028") ? 503 :
+      400;
     return res.status(status).json({ message: friendlyPrismaMessage(err) });
   }
   if (isPrismaValidationError(err)) {
