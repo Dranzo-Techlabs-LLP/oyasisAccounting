@@ -76,6 +76,10 @@ export default function BookingDetailPage() {
   const canWrite = can("bookings", "write");
   const canDelete = can("bookings", "delete");
   const canInvoice = can("invoices", "write");
+  // Viewing / downloading an invoice is a read — available to any role with
+  // invoices read access (e.g. agents, viewers, B2B). Only state changes like
+  // "Mark Sent" need write.
+  const canViewInvoice = can("invoices", "read");
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const [item, setItem] = useState(null);
@@ -515,7 +519,7 @@ export default function BookingDetailPage() {
                   <Plus className="h-4 w-4" /> Add Payment
                 </Button>
               )}
-              {canInvoice && (
+              {canViewInvoice && (
                 <Button variant="secondary" onClick={() => setInvoiceOptsOpen(true)}>
                   <FileText className="h-4 w-4" /> Invoice
                 </Button>
