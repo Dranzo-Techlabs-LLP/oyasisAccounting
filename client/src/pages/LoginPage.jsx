@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Eye, EyeOff, Lock, Mail, TicketsPlane } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Lock, Mail, TicketsPlane } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
 import { Button, Field, Input } from "../components/FormPrimitives";
@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [settings, setSettings] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     // Fetch branding for login screen (public-ish — no auth required for logo file, settings GET is auth-only)
@@ -131,29 +132,44 @@ export default function LoginPage() {
             className="mt-7 grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault();
+              setError("");
               try {
                 setBusy(true);
                 await login(form);
                 toast.success("Welcome back");
-              } catch (error) {
-                toast.error(error.response?.data?.message || "Unable to login");
+              } catch (err) {
+                // 401 -> wrong email/password/inactive; 400 -> invalid email
+                // format; anything else -> generic. Show it inline AND as a toast.
+                const status = err.response?.status;
+                const serverMsg = err.response?.data?.message;
+                const msg = status === 401
+                  ? "Incorrect email or password. Please try again."
+                  : (serverMsg || (err.response ? "Unable to login. Please try again." : "Can't reach the server. Check your connection and try again."));
+                setError(msg);
+                toast.error(msg);
               } finally {
                 setBusy(false);
               }
             }}
           >
+            {error && (
+              <div role="alert" className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
             <Field label="Email">
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-[var(--text-faint)]" />
                 <Input type="email" autoComplete="email" required className="pl-9"
-                  value={form.email} onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))} />
+                  value={form.email} onChange={(e) => { setError(""); setForm((c) => ({ ...c, email: e.target.value })); }} />
               </div>
             </Field>
             <Field label="Password">
               <div className="relative">
                 <Lock className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-[var(--text-faint)]" />
                 <Input type={showPw ? "text" : "password"} autoComplete="current-password" required className="pl-9 pr-10"
-                  value={form.password} onChange={(e) => setForm((c) => ({ ...c, password: e.target.value }))} />
+                  value={form.password} onChange={(e) => { setError(""); setForm((c) => ({ ...c, password: e.target.value })); }} />
                 <button type="button" onClick={() => setShowPw((s) => !s)}
                   className="absolute right-2 top-2.5 flex h-6 w-7 items-center justify-center rounded-md text-[var(--text-soft)] hover:bg-[var(--surface-muted)]"
                   aria-label={showPw ? "Hide password" : "Show password"}
