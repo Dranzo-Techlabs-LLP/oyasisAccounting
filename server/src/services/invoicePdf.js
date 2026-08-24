@@ -109,42 +109,57 @@ export const buildInvoicePdf = async (booking, options = {}) => {
     labelValue(doc, "Booking ID", booking.bookingCode, 360, 166, 140);
 
     // ---------- Bill To + Package Details (dynamic height) ----------
+    // Each line advances by its ACTUAL rendered height, so a long package name
+    // that wraps to two lines pushes the next line down instead of overlapping
+    // it. Empty values (e.g. a missing email) are dropped — we never print
+    // "No email provided".
     const billLines = [
       booking.customer.fullName,
       booking.customer.phone,
-      booking.customer.email || "No email provided"
-    ];
+      booking.customer.email
+    ].filter(Boolean);
     const endRange = booking.endDate
-      ? `${formatDate(booking.departureDate)} → ${formatDate(booking.endDate)}`
+      ? `${formatDate(booking.departureDate)} to ${formatDate(booking.endDate)}`
       : `Departure ${formatDate(booking.departureDate)}`;
     const pkgLines = [
       booking.travelPackage.name,
       booking.travelPackage.destination,
       `${booking.travelPackage.durationDays} Days / ${booking.travelPackage.durationNights} Nights`,
       endRange
-    ];
+    ].filter(Boolean);
+
     const detailsTop = 240;
     const titleOffset = 18;
     const firstLineOffset = 42; // y of first detail line relative to card top
-    const lineHeight = 18;
+    const contentWidth = 212;
+    const lineGap = 5;
     const bottomPad = 14;
-    const maxLines = Math.max(billLines.length, pkgLines.length);
-    const cardHeight = firstLineOffset + maxLines * lineHeight + bottomPad - lineHeight; // last line baseline
-    // simpler: lines fit cleanly if card spans firstLineOffset + maxLines*lineHeight + bottomPad
-    const cardH = firstLineOffset + (maxLines - 1) * lineHeight + bottomPad + 4;
+
+    // Measure each column's wrapped height with the same font used to render,
+    // then size the cards to the taller column.
+    doc.font("Helvetica").fontSize(11);
+    const stackHeight = (lines) =>
+      lines.reduce((h, t) => h + doc.heightOfString(String(t), { width: contentWidth }) + lineGap, 0);
+    const contentH = Math.max(stackHeight(billLines), stackHeight(pkgLines));
+    const cardH = firstLineOffset + contentH + bottomPad;
 
     doc.roundedRect(46,  detailsTop, 240, cardH, 10).fillAndStroke("#f7faff", "#dbe4f0");
     doc.roundedRect(304, detailsTop, 240, cardH, 10).fillAndStroke("#f7faff", "#dbe4f0");
 
+    // Render one column, advancing y by each line's real (wrapped) height.
+    const renderStack = (lines, x, startY) => {
+      let y = startY;
+      for (const txt of lines) {
+        detailLine(doc, String(txt), x, y, contentWidth);
+        y += doc.heightOfString(String(txt), { width: contentWidth }) + lineGap;
+      }
+    };
+
     sectionTitle(doc, "Bill To", 60, detailsTop + titleOffset);
-    billLines.forEach((txt, i) => {
-      detailLine(doc, txt, 60, detailsTop + firstLineOffset + i * lineHeight, 210);
-    });
+    renderStack(billLines, 60, detailsTop + firstLineOffset);
 
     sectionTitle(doc, "Package Details", 318, detailsTop + titleOffset);
-    pkgLines.forEach((txt, i) => {
-      detailLine(doc, txt, 318, detailsTop + firstLineOffset + i * lineHeight, 210);
-    });
+    renderStack(pkgLines, 318, detailsTop + firstLineOffset);
 
     // Anchor for cost table — placed cleanly below info cards
     const detailsBottom = detailsTop + cardH;

@@ -80,37 +80,48 @@ export const buildTicketSaleInvoicePdf = async (sale, invoiceNumber, options = {
     doc.font("Helvetica").fontSize(14).fillColor("#1d3a6e").text(sale.saleCode, 380, 182);
 
     // ---------- Bill To + Ticket Details (dynamic height) ----------
+    // Drop empty values (e.g. a missing email) — never print "No email
+    // provided" — and advance each line by its real wrapped height so long
+    // values don't overlap the next line.
     const billLines = [
       sale.customer?.fullName || "Customer",
-      sale.customer?.phone || "",
-      sale.customer?.email || "No email provided"
+      sale.customer?.phone,
+      sale.customer?.email
     ].filter(Boolean);
     const ticketLines = [
       `${TICKET_TYPE_LABEL[sale.ticketType] || "Ticket"} via ${sale.vendor || "—"}`,
       `Ref: ${sale.reference || "—"}`,
-      `${sale.fromLocation || "?"} → ${sale.toLocation || "?"}`,
+      `${sale.fromLocation || "?"} to ${sale.toLocation || "?"}`,
       `Depart: ${sale.departAt ? formatDate(sale.departAt) : "—"}${sale.returnAt ? `  ·  Return: ${formatDate(sale.returnAt)}` : ""}`
-    ];
+    ].filter(Boolean);
     const detailsTop = 240;
     const titleOffset = 18;
     const firstLineOffset = 42;
-    const lineHeight = 18;
+    const contentWidth = 212;
+    const lineGap = 5;
     const bottomPad = 14;
-    const maxLines = Math.max(billLines.length, ticketLines.length);
-    const cardH = firstLineOffset + (maxLines - 1) * lineHeight + bottomPad + 4;
+
+    doc.font("Helvetica").fontSize(11);
+    const stackHeight = (lines) =>
+      lines.reduce((h, t) => h + doc.heightOfString(String(t), { width: contentWidth }) + lineGap, 0);
+    const cardH = firstLineOffset + Math.max(stackHeight(billLines), stackHeight(ticketLines)) + bottomPad;
 
     doc.roundedRect(46,  detailsTop, 240, cardH, 10).fillAndStroke("#f7faff", "#dbe4f0");
     doc.roundedRect(304, detailsTop, 240, cardH, 10).fillAndStroke("#f7faff", "#dbe4f0");
 
+    const renderStack = (lines, x, startY) => {
+      let y = startY;
+      for (const txt of lines) {
+        detailLine(doc, String(txt), x, y, contentWidth);
+        y += doc.heightOfString(String(txt), { width: contentWidth }) + lineGap;
+      }
+    };
+
     sectionTitle(doc, "Bill To", 60, detailsTop + titleOffset);
-    billLines.forEach((txt, i) => {
-      detailLine(doc, txt, 60, detailsTop + firstLineOffset + i * lineHeight, 210);
-    });
+    renderStack(billLines, 60, detailsTop + firstLineOffset);
 
     sectionTitle(doc, "Ticket Details", 318, detailsTop + titleOffset);
-    ticketLines.forEach((txt, i) => {
-      detailLine(doc, txt, 318, detailsTop + firstLineOffset + i * lineHeight, 210);
-    });
+    renderStack(ticketLines, 318, detailsTop + firstLineOffset);
 
     const detailsBottom = detailsTop + cardH;
 
