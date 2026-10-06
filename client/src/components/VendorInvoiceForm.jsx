@@ -6,6 +6,9 @@ import { formatCurrency, formatDate } from "../utils/formatters";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// Payment methods — same set used on booking / ticket-sale forms. UPI default.
+const PAYMENT_METHODS = ["UPI", "Cash", "Bank Transfer", "Card", "Cheque", "Other"];
+
 const blankItem = () => ({
   description: "",
   hsnCode: "",
@@ -26,7 +29,8 @@ const initial = {
   terms: "",
   showGstin: true,
   includeBank: true,
-  items: [blankItem()]
+  items: [blankItem()],
+  installments: []
 };
 
 export default function VendorInvoiceForm({ vendors, bookings = [], initialValues, onSubmit, busy }) {
@@ -85,6 +89,24 @@ export default function VendorInvoiceForm({ vendors, bookings = [], initialValue
     ...c,
     items: c.items.length > 1 ? c.items.filter((_, i) => i !== idx) : c.items
   }));
+
+  // Part payments / installments recorded against this invoice.
+  const addInstallment = () => setForm((c) => ({
+    ...c,
+    installments: [...(c.installments || []), { amount: "", paymentDate: todayISO(), method: "UPI", note: "" }]
+  }));
+  const updateInstallment = (idx, patch) => setForm((c) => ({
+    ...c,
+    installments: c.installments.map((p, i) => (i === idx ? { ...p, ...patch } : p))
+  }));
+  const removeInstallment = (idx) => setForm((c) => ({
+    ...c,
+    installments: c.installments.filter((_, i) => i !== idx)
+  }));
+
+  const paidNow = (form.installments || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+  const alreadyPaid = Number(initialValues?.paidAmount || 0);
+  const balancePreview = Math.max(totals.total - alreadyPaid - paidNow, 0);
 
   const buildBookingDescription = (b) => {
     const pkg = b.travelPackage || {};
@@ -156,12 +178,26 @@ export default function VendorInvoiceForm({ vendors, bookings = [], initialValue
         return;
       }
 
+      // Part-payment rows → recorded after the invoice is saved. _payments is
+      // handled by the page (posted to /vendor-invoices/:id/payments); the
+      // invoice endpoint itself ignores it.
+      const payments = (form.installments || [])
+        .filter((p) => Number(p.amount) > 0)
+        .map((p) => ({
+          amount: Number(p.amount),
+          paymentDate: p.paymentDate || todayISO(),
+          method: p.method || "UPI",
+          note: p.note || ""
+        }));
+
       onSubmit({
         ...form,
         vendorId: Number(form.vendorId),
         issueDate: form.issueDate || todayISO(),
         dueDate: form.dueDate || null,
-        items: cleanItems
+        items: cleanItems,
+        installments: undefined,
+        _payments: payments
       });
     }}>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -354,6 +390,53 @@ export default function VendorInvoiceForm({ vendors, bookings = [], initialValue
           <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-soft)]">Total</p>
           <p className="mt-1 text-base font-semibold text-[var(--brand)]">{formatCurrency(totals.total)}</p>
         </div>
+      </div>
+
+      {/* Part payments / installments */}
+      <div className="rounded-md border border-[var(--line)] bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text)]">Part Payments (optional)</p>
+            <p className="mt-0.5 text-xs text-[var(--text-soft)]">Record advances / installments received against this invoice.</p>
+          </div>
+          <button type="button" onClick={addInstallment} className="inline-flex items-center gap-1 text-sm font-medium text-[var(--brand)]">
+            <Plus className="h-4 w-4" /> Add installment
+          </button>
+        </div>
+
+        {isEdit && alreadyPaid > 0 && (
+          <p className="mb-2 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--text-soft)]">
+            Already paid on this invoice: <span className="font-semibold text-[var(--text)]">{formatCurrency(alreadyPaid)}</span>. Installments added below are recorded on top of it.
+          </p>
+        )}
+
+        {form.installments.length === 0 ? (
+          <p className="rounded-md bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--text-soft)]">No part payment recorded. Add one if an advance was received.</p>
+        ) : (
+          <div className="space-y-2">
+            {form.installments.map((p, i) => (
+              <div key={i} className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-3 lg:grid-cols-[140px_150px_140px_1fr_44px]">
+                <Input type="number" min="0" step="0.01" placeholder="Amount" value={p.amount}
+                  onChange={(e) => updateInstallment(i, { amount: e.target.value })} />
+                <Input type="date" value={p.paymentDate}
+                  onChange={(e) => updateInstallment(i, { paymentDate: e.target.value })} />
+                <Select value={p.method || "UPI"} onChange={(e) => updateInstallment(i, { method: e.target.value })}>
+                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                </Select>
+                <Input placeholder="Note (optional)" value={p.note}
+                  onChange={(e) => updateInstallment(i, { note: e.target.value })} />
+                <button type="button" onClick={() => removeInstallment(i)} aria-label="Remove"
+                  className="flex h-11 items-center justify-center rounded-md border border-[var(--line)] bg-white text-[var(--text-soft)] hover:text-red-600">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <div className="flex flex-wrap justify-end gap-6 pt-1 text-sm">
+              <span className="text-[var(--text-soft)]">Paying now: <span className="font-semibold text-[var(--text)]">{formatCurrency(paidNow)}</span></span>
+              <span className="text-[var(--text-soft)]">Balance after: <span className="font-semibold text-[var(--text)]">{formatCurrency(balancePreview)}</span></span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end">
