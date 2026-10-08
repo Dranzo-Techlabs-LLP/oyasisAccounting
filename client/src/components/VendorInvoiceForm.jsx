@@ -54,6 +54,17 @@ export default function VendorInvoiceForm({ vendors, bookings = [], initialValue
           unitPrice: it.unitPrice ?? 0,
           taxRate: it.taxRate ?? 0,
           discountAmount: it.discountAmount ?? 0
+        })),
+        // Existing payment history (oldest first). Rows with an id are edited in
+        // place on save; rows removed here are deleted. A `legacy` row is paid
+        // money that was recorded without a dated entry — shown, but read-only.
+        installments: (initialValues.payments || []).map((p) => ({
+          id: p.id ?? undefined,
+          legacy: Boolean(p.legacy),
+          amount: p.amount,
+          paymentDate: p.paymentDate ? String(p.paymentDate).slice(0, 10) : todayISO(),
+          method: p.method || "UPI",
+          note: p.note || ""
         }))
       });
     } else {
@@ -104,9 +115,11 @@ export default function VendorInvoiceForm({ vendors, bookings = [], initialValue
     installments: c.installments.filter((_, i) => i !== idx)
   }));
 
-  const paidNow = (form.installments || []).reduce((s, p) => s + Number(p.amount || 0), 0);
-  const alreadyPaid = Number(initialValues?.paidAmount || 0);
-  const balancePreview = Math.max(totals.total - alreadyPaid - paidNow, 0);
+  // Paid = every payment row (including any earlier un-dated amount); balance
+  // is what's still to pay. Both update live as rows or line items change.
+  const totalPaid = (form.installments || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+  const balanceDue = Math.max(totals.total - totalPaid, 0);
+  const overpaid = totalPaid > totals.total + 0.005;
 
   const buildBookingDescription = (b) => {
     const pkg = b.travelPackage || {};
@@ -178,26 +191,28 @@ export default function VendorInvoiceForm({ vendors, bookings = [], initialValue
         return;
       }
 
-      // Part-payment rows → recorded after the invoice is saved. _payments is
-      // handled by the page (posted to /vendor-invoices/:id/payments); the
-      // invoice endpoint itself ignores it.
+      // The full payment history goes with the invoice: existing rows keep their
+      // id (edited in place), new rows omit it, and any row removed here is
+      // deleted on the server. The read-only "earlier payment" row is never sent
+      // — the server carries that amount forward itself.
       const payments = (form.installments || [])
-        .filter((p) => Number(p.amount) > 0)
+        .filter((p) => !p.legacy && Number(p.amount) > 0)
         .map((p) => ({
+          ...(p.id ? { id: p.id } : {}),
           amount: Number(p.amount),
           paymentDate: p.paymentDate || todayISO(),
           method: p.method || "UPI",
           note: p.note || ""
         }));
 
+      const { installments: _installments, ...rest } = form;
       onSubmit({
-        ...form,
+        ...rest,
         vendorId: Number(form.vendorId),
         issueDate: form.issueDate || todayISO(),
         dueDate: form.dueDate || null,
         items: cleanItems,
-        installments: undefined,
-        _payments: payments
+        payments
       });
     }}>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -404,38 +419,56 @@ export default function VendorInvoiceForm({ vendors, bookings = [], initialValue
           </button>
         </div>
 
-        {isEdit && alreadyPaid > 0 && (
-          <p className="mb-2 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--text-soft)]">
-            Already paid on this invoice: <span className="font-semibold text-[var(--text)]">{formatCurrency(alreadyPaid)}</span>. Installments added below are recorded on top of it.
-          </p>
-        )}
-
         {form.installments.length === 0 ? (
           <p className="rounded-md bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--text-soft)]">No part payment recorded. Add one if an advance was received.</p>
         ) : (
           <div className="space-y-2">
             {form.installments.map((p, i) => (
-              <div key={i} className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-3 lg:grid-cols-[140px_150px_140px_1fr_44px]">
-                <Input type="number" min="0" step="0.01" placeholder="Amount" value={p.amount}
-                  onChange={(e) => updateInstallment(i, { amount: e.target.value })} />
-                <Input type="date" value={p.paymentDate}
-                  onChange={(e) => updateInstallment(i, { paymentDate: e.target.value })} />
-                <Select value={p.method || "UPI"} onChange={(e) => updateInstallment(i, { method: e.target.value })}>
-                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                </Select>
-                <Input placeholder="Note (optional)" value={p.note}
-                  onChange={(e) => updateInstallment(i, { note: e.target.value })} />
-                <button type="button" onClick={() => removeInstallment(i)} aria-label="Remove"
-                  className="flex h-11 items-center justify-center rounded-md border border-[var(--line)] bg-white text-[var(--text-soft)] hover:text-red-600">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+              p.legacy ? (
+                <div key={`legacy-${i}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-[var(--line)] bg-[var(--surface-muted)] px-3 py-3 text-sm">
+                  <span className="text-[var(--text-soft)]">Earlier payment <span className="text-xs">(recorded without a date — kept as is)</span></span>
+                  <span className="font-semibold text-[var(--text)]">{formatCurrency(p.amount)}</span>
+                </div>
+              ) : (
+                <div key={p.id ?? `new-${i}`} className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-3 lg:grid-cols-[140px_150px_140px_1fr_44px]">
+                  <Input type="number" min="0" step="0.01" placeholder="Amount" value={p.amount}
+                    onChange={(e) => updateInstallment(i, { amount: e.target.value })} />
+                  <Input type="date" value={p.paymentDate}
+                    onChange={(e) => updateInstallment(i, { paymentDate: e.target.value })} />
+                  <Select value={p.method || "UPI"} onChange={(e) => updateInstallment(i, { method: e.target.value })}>
+                    {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </Select>
+                  <Input placeholder="Note (optional)" value={p.note}
+                    onChange={(e) => updateInstallment(i, { note: e.target.value })} />
+                  <button type="button" onClick={() => removeInstallment(i)} aria-label="Remove payment"
+                    className="flex h-11 items-center justify-center rounded-md border border-[var(--line)] bg-white text-[var(--text-soft)] hover:text-red-600">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )
             ))}
-            <div className="flex flex-wrap justify-end gap-6 pt-1 text-sm">
-              <span className="text-[var(--text-soft)]">Paying now: <span className="font-semibold text-[var(--text)]">{formatCurrency(paidNow)}</span></span>
-              <span className="text-[var(--text-soft)]">Balance after: <span className="font-semibold text-[var(--text)]">{formatCurrency(balancePreview)}</span></span>
-            </div>
           </div>
+        )}
+
+        {/* Where the invoice stands: total, received so far, and what's left. */}
+        <div className="mt-3 grid gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:grid-cols-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-soft)]">Invoice total</p>
+            <p className="mt-1 text-base font-semibold text-[var(--text)]">{formatCurrency(totals.total)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-soft)]">Paid so far</p>
+            <p className="mt-1 text-base font-semibold text-emerald-700">{formatCurrency(totalPaid)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-soft)]">Balance due</p>
+            <p className={`mt-1 text-base font-semibold ${balanceDue > 0 ? "text-red-600" : "text-emerald-700"}`}>{formatCurrency(balanceDue)}</p>
+          </div>
+        </div>
+        {overpaid && (
+          <p className="mt-2 text-xs font-medium text-amber-700">
+            Payments add up to more than the invoice total ({formatCurrency(totalPaid - totals.total)} over). Check the amounts.
+          </p>
         )}
       </div>
 

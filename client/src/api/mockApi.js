@@ -1389,10 +1389,46 @@ export async function mockRequest(method, url, config = {}) {
   const decorateVendorInvoice = (inv) => {
     const vendor = state.vendors.find((v) => v.id === inv.vendorId);
     const items = state.vendorInvoiceItems.filter((it) => it.vendorInvoiceId === inv.id);
+    // Oldest first, like the server, so the history reads in the order paid.
     const payments = state.vendorInvoicePayments
       .filter((p) => p.vendorInvoiceId === inv.id)
-      .sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate));
+      .sort((a, b) => new Date(a.paymentDate) - new Date(b.paymentDate) || a.id - b.id);
     return { ...inv, vendor: vendor || null, items, payments };
+  };
+
+  // Replace an invoice's payments with `rows` (update by id / create / delete
+  // the rest), then recompute paid / balance / status — mirrors the server.
+  const applyVendorPayments = (inv, rows) => {
+    const mine = state.vendorInvoicePayments.filter((p) => p.vendorInvoiceId === inv.id);
+    const keep = new Set(rows.map((r) => Number(r.id)).filter((n) => mine.some((p) => p.id === n)));
+    state.vendorInvoicePayments = state.vendorInvoicePayments.filter(
+      (p) => p.vendorInvoiceId !== inv.id || keep.has(p.id)
+    );
+    let nextId = state.vendorInvoicePayments.reduce((m, p) => Math.max(m, p.id), 0);
+    for (const r of rows) {
+      const data = {
+        amount: Number(r.amount || 0),
+        paymentDate: r.paymentDate ? new Date(r.paymentDate).toISOString() : new Date().toISOString(),
+        method: r.method || "UPI",
+        note: r.note || ""
+      };
+      if (keep.has(Number(r.id))) {
+        state.vendorInvoicePayments = state.vendorInvoicePayments.map((p) => (p.id === Number(r.id) ? { ...p, ...data } : p));
+      } else {
+        state.vendorInvoicePayments.push({ id: ++nextId, vendorInvoiceId: inv.id, ...data });
+      }
+    }
+    const paid = state.vendorInvoicePayments
+      .filter((p) => p.vendorInvoiceId === inv.id)
+      .reduce((s, p) => s + p.amount, 0);
+    const total = Number(inv.totalAmount || 0);
+    inv.paidAmount = paid;
+    inv.balanceDue = Math.max(total - paid, 0);
+    if (inv.status !== "CANCELLED") {
+      if (total > 0 && inv.balanceDue === 0 && paid > 0) { inv.status = "PAID"; inv.paidAt = inv.paidAt || new Date().toISOString(); }
+      else if (inv.status === "PAID" && inv.balanceDue > 0) { inv.status = "SENT"; inv.paidAt = null; }
+      else if (paid > 0 && inv.status === "DRAFT") inv.status = "SENT";
+    }
   };
 
   if (route === "/vendor-invoices" && method === "get") {
@@ -1449,6 +1485,9 @@ export async function mockRequest(method, url, config = {}) {
         position: idx
       });
     });
+    if (Array.isArray(payload.payments) && payload.payments.length > 0) {
+      applyVendorPayments(inv, payload.payments);
+    }
     saveState(state);
     return createResponse(decorateVendorInvoice(inv));
   }
@@ -1456,7 +1495,8 @@ export async function mockRequest(method, url, config = {}) {
     const id = Number(route.split("/")[2]);
     const existing = state.vendorInvoices.find((i) => i.id === id);
     if (!existing) throw new Error("Vendor invoice not found");
-    const items = Array.isArray(payload.items) ? payload.items : null;
+    const { payments: paymentRows, ...invoicePayload } = payload;
+    const items = Array.isArray(invoicePayload.items) ? invoicePayload.items : null;
     let totals = {
       subtotalAmount: existing.subtotalAmount,
       taxAmount: existing.taxAmount,
@@ -1465,7 +1505,7 @@ export async function mockRequest(method, url, config = {}) {
     if (items) {
       const subtotal = items.reduce((s, it) => s + Number(it.unitPrice || 0) * Number(it.quantity || 1), 0);
       const taxAmount = items.reduce((s, it) => s + (Number(it.unitPrice || 0) * Number(it.quantity || 1)) * (Number(it.taxRate || 0) / 100), 0);
-      const discount = Number(payload.discountAmount ?? existing.discountAmount ?? 0);
+      const discount = Number(invoicePayload.discountAmount ?? existing.discountAmount ?? 0);
       const total = Math.max(subtotal + taxAmount - discount, 0);
       totals = { subtotalAmount: subtotal, taxAmount, totalAmount: total };
       state.vendorInvoiceItems = state.vendorInvoiceItems.filter((it) => it.vendorInvoiceId !== id);
@@ -1489,14 +1529,16 @@ export async function mockRequest(method, url, config = {}) {
       i.id === id
         ? {
             ...i,
-            ...payload,
+            ...invoicePayload,
             ...totals,
             balanceDue: Math.max(totals.totalAmount - Number(i.paidAmount || 0), 0)
           }
         : i
     );
+    const saved = state.vendorInvoices.find((i) => i.id === id);
+    if (Array.isArray(paymentRows)) applyVendorPayments(saved, paymentRows);
     saveState(state);
-    return createResponse(decorateVendorInvoice(state.vendorInvoices.find((i) => i.id === id)));
+    return createResponse(decorateVendorInvoice(saved));
   }
   if (/^\/vendor-invoices\/\d+$/.test(route) && method === "delete") {
     const id = Number(route.split("/")[2]);

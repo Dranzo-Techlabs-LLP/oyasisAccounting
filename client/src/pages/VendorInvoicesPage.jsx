@@ -52,33 +52,18 @@ export default function VendorInvoicesPage() {
   const totalOutstanding = items.reduce((s, i) => s + Number(i.balanceDue || 0), 0);
 
   const submit = async (payload) => {
-    // Part-payment rows ride along on the payload; they're recorded separately
-    // against the saved invoice (the invoice endpoint itself ignores them).
-    const payments = payload._payments || [];
-    delete payload._payments;
     try {
       setBusy(true);
-      let invoiceId;
+      // The payment history travels with the invoice (payload.payments): the
+      // server saves the invoice and its payments together and recomputes paid,
+      // balance and status from them.
       if (editing) {
         await api.put(`/vendor-invoices/${editing.id}`, payload);
-        invoiceId = editing.id;
+        toast.success("Invoice updated");
       } else {
-        const res = await api.post("/vendor-invoices", payload);
-        invoiceId = res.data?.id;
+        await api.post("/vendor-invoices", payload);
+        toast.success("Invoice created");
       }
-      // Record each installment against the invoice (updates paid/balance and
-      // mirrors to the ledger as income).
-      for (const p of payments) {
-        if (Number(p.amount) > 0 && invoiceId) {
-          await api.post(`/vendor-invoices/${invoiceId}/payments`, {
-            amount: Number(p.amount),
-            paymentDate: p.paymentDate || undefined,
-            paymentMethod: p.method || undefined,
-            notes: p.note || undefined
-          });
-        }
-      }
-      toast.success(editing ? "Invoice updated" : "Invoice created");
       setOpen(false); setEditing(null); load();
     } catch (e) {
       toast.error(e.response?.data?.message || "Save failed");

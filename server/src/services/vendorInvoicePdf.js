@@ -74,8 +74,17 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
       .font("Helvetica-Bold").fontSize(12)
       .text("TAX INVOICE", 404, 65, { width: 140, align: "center" })
       .restore();
-    doc.fillColor("#142447").font("Helvetica-Bold").fontSize(20)
-      .text(invoice.invoiceNumber, 404, 116, { width: 140, align: "center" });
+    // Shrink the number to fit its box rather than letting a long one wrap
+    // ("B2B-2026-000" / "6") onto a second line.
+    let numSize = 20;
+    doc.font("Helvetica-Bold");
+    while (numSize > 12) {
+      doc.fontSize(numSize);
+      if (doc.widthOfString(invoice.invoiceNumber) <= 140) break;
+      numSize -= 1;
+    }
+    doc.fillColor("#142447").font("Helvetica-Bold").fontSize(numSize)
+      .text(invoice.invoiceNumber, 404, 116, { width: 140, align: "center", lineBreak: false });
 
     // Invoice meta strip
     doc.font("Helvetica-Bold").fontSize(9).fillColor("#57658a").text("Invoice Date", 46, 158);
@@ -191,6 +200,46 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
           { text: value, x: 460, width: 90, align: "right" }
         ], ty, opts);
       ty += 20;
+    }
+
+    // ---------- Payments received ----------
+    // Each part payment with its date and method, plus the balance still to pay
+    // after it — so the invoice tells the whole payment story, not just a total.
+    const payments = invoice.payments || [];
+    if (payments.length > 0) {
+      ty += 10;
+      if (ty > 680) { doc.addPage(); ty = 60; }
+      sectionTitle(doc, "Payments Received", 46, ty);
+      ty += 18;
+
+      const pc = { idx: 46, date: 76, method: 160, note: 252, amount: 372, bal: 456 };
+      const pw = { idx: 26, date: 80, method: 88, note: 116, amount: 80, bal: 93 };
+      const header = () => {
+        doc.rect(46, ty, 503, 20).fillAndStroke("#eef3fa", "#dbe4f0");
+        doc.font("Helvetica-Bold").fontSize(9).fillColor("#1d3a6e");
+        doc.text("#", pc.idx + 6, ty + 6, { width: pw.idx });
+        doc.text("Date", pc.date, ty + 6, { width: pw.date });
+        doc.text("Method", pc.method, ty + 6, { width: pw.method });
+        doc.text("Note", pc.note, ty + 6, { width: pw.note });
+        doc.text("Amount", pc.amount, ty + 6, { width: pw.amount, align: "right" });
+        doc.text("Balance", pc.bal, ty + 6, { width: pw.bal, align: "right" });
+        ty += 26;
+      };
+      header();
+
+      let remaining = toNumber(invoice.totalAmount);
+      payments.forEach((p, i) => {
+        if (ty > 740) { doc.addPage(); ty = 60; header(); }
+        remaining = Math.max(remaining - toNumber(p.amount), 0);
+        doc.font("Helvetica").fontSize(9).fillColor("#142447");
+        doc.text(String(i + 1), pc.idx + 6, ty, { width: pw.idx });
+        doc.text(p.paymentDate ? formatDate(p.paymentDate) : "-", pc.date, ty, { width: pw.date });
+        doc.text(p.method || "-", pc.method, ty, { width: pw.method, height: 11, ellipsis: true });
+        doc.text(p.note || "", pc.note, ty, { width: pw.note, height: 11, ellipsis: true });
+        doc.text(money(p.amount, invoice.currency), pc.amount - 12, ty, { width: pw.amount + 12, align: "right" });
+        doc.text(money(remaining, invoice.currency), pc.bal - 6, ty, { width: pw.bal + 6, align: "right" });
+        ty += 18;
+      });
     }
 
     // ---------- Footer ----------
