@@ -21,7 +21,17 @@ const detailLine = (doc, text, x, y, w) => {
 const tableRow = (doc, label, value, y, { bold = false, borderTop = false } = {}) => {
   if (borderTop) doc.moveTo(54, y - 8).lineTo(541, y - 8).stroke("#d7e8e6");
   doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(11).fillColor("#173f3f").text(label, 58, y, { width: 260 });
-  doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(11).fillColor("#173f3f").text(value, 380, y, { width: 150, align: "right" });
+  // Amount stays on ONE line: shrink to fit the column instead of wrapping a big
+  // figure onto a second, clipped line.
+  const vFont = bold ? "Helvetica-Bold" : "Helvetica";
+  let vSize = 11;
+  doc.font(vFont);
+  while (vSize > 6) {
+    doc.fontSize(vSize);
+    if (doc.widthOfString(String(value)) <= 150) break;
+    vSize -= 0.5;
+  }
+  doc.fillColor("#173f3f").fontSize(vSize).text(String(value), 380, y, { width: 150, align: "right", lineBreak: false });
 };
 
 const TICKET_TYPE_LABEL = {
@@ -68,8 +78,17 @@ export const buildTicketSaleInvoicePdf = async (sale, invoiceNumber, options = {
     doc.save().roundedRect(404, 48, 140, 44, 10).fillAndStroke("#f6efe0", "#f5a623")
       .fillColor("#7a4b00").font("Helvetica-Bold").fontSize(14)
       .text("TICKET INVOICE", 404, 63, { width: 140, align: "center" }).restore();
-    doc.fillColor("#123636").font("Helvetica-Bold").fontSize(24)
-      .text(invoiceNumber, 404, 116, { width: 140, align: "center" });
+    // Shrink the number to fit its 140pt box rather than letting it wrap onto a
+    // second line ("OGH-2026-0" / "007") and run into the label below.
+    let numSize = 24;
+    doc.font("Helvetica-Bold");
+    while (numSize > 12) {
+      doc.fontSize(numSize);
+      if (doc.widthOfString(String(invoiceNumber)) <= 140) break;
+      numSize -= 1;
+    }
+    doc.fillColor("#123636").font("Helvetica-Bold").fontSize(numSize)
+      .text(String(invoiceNumber), 404, 116, { width: 140, align: "center", lineBreak: false });
 
     // Invoice meta
     doc.font("Helvetica-Bold").fontSize(10).fillColor("#567070").text("Invoice No", 46, 166);

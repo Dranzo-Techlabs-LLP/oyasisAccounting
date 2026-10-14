@@ -22,12 +22,37 @@ const detailLine = (doc, text, x, y, w) => {
   doc.font("Helvetica").fontSize(10).fillColor("#142447").text(text || " ", x, y, { width: w });
 };
 
+// Draw a number / amount on ONE line, shrinking the font until it fits the
+// column. Money cells must never wrap: a wrapped "INR 6,84,600.00" spills onto a
+// second line that gets clipped or lands on the next row, so the amount looks
+// cut off. Shrinking keeps every digit visible no matter how large the figure.
+const fitText = (doc, text, x, y, width, { align = "right", font = "Helvetica", size = 10, min = 6 } = {}) => {
+  let s = size;
+  doc.font(font);
+  while (s > min) {
+    doc.fontSize(s);
+    if (doc.widthOfString(text) <= width) break;
+    s -= 0.5;
+  }
+  doc.fontSize(s).text(text, x, y, { width, align, lineBreak: false });
+  doc.fontSize(size);
+};
+
+// Wrapped height of a text block, so a row can grow to fit it instead of
+// assuming one line.
+const textHeight = (doc, text, width, { font = "Helvetica", size = 10 } = {}) => {
+  doc.font(font).fontSize(size);
+  return Math.ceil(doc.heightOfString(String(text || " "), { width }));
+};
+
 const tableRow = (doc, cells, y, { bold = false, borderTop = false } = {}) => {
   if (borderTop) doc.moveTo(46, y - 6).lineTo(549, y - 6).stroke("#dbe4f0");
-  doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor("#142447");
-  // cells: array of { text, x, width, align }
+  const font = bold ? "Helvetica-Bold" : "Helvetica";
+  doc.font(font).fontSize(10).fillColor("#142447");
+  // cells: array of { text, x, width, align, fit }
   for (const c of cells) {
-    doc.text(c.text, c.x, y, { width: c.width, align: c.align || "left" });
+    if (c.fit) fitText(doc, c.text, c.x, y, c.width, { align: c.align || "right", font, size: 10 });
+    else doc.font(font).fontSize(10).text(c.text, c.x, y, { width: c.width, align: c.align || "left" });
   }
 };
 
@@ -143,29 +168,41 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
     // Columns: # | Description | Qty | Rate | Tax% | Amount
     // The Rate cell embeds "unit x qty" inline (e.g. "INR 28,999 x 5") so a
     // buyer can verify the line total without a separate Calc column.
-    const colX = { idx: 46, desc: 76, qty: 326, rate: 360, tax: 442, total: 488 };
-    const colW = { idx: 26, desc: 248, qty: 30, rate: 78, tax: 42, total: 60 };
+    // Column budget (503pt wide, 6pt inner padding each side). Rate and Amount
+    // get the room they actually need for figures in the lakhs / crores; the
+    // description takes what is left and wraps, with the row growing to match.
+    const colX = { idx: 46, desc: 76, qty: 252, rate: 296, tax: 412, total: 452 };
+    const colW = { idx: 24, desc: 172, qty: 38, rate: 110, tax: 36, total: 91 };
+    const ROW_MIN = 24;
+    const ROW_PAD = 12;
+    const PAGE_BOTTOM = 735;
 
-    // Header
-    doc.rect(46, tableTop, 503, 24).fillAndStroke("#1d3a6e", "#1d3a6e");
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#ffffff");
-    doc.text("#", colX.idx + 6, tableTop + 8, { width: colW.idx });
-    doc.text("Description", colX.desc, tableTop + 8, { width: colW.desc });
-    doc.text("Qty", colX.qty, tableTop + 8, { width: colW.qty, align: "right" });
-    doc.text("Rate", colX.rate, tableTop + 8, { width: colW.rate, align: "right" });
-    doc.text("Tax %", colX.tax, tableTop + 8, { width: colW.tax, align: "right" });
-    doc.text("Amount", colX.total, tableTop + 8, { width: colW.total, align: "right" });
+    const drawItemsHeader = (y) => {
+      doc.rect(46, y, 503, 24).fillAndStroke("#1d3a6e", "#1d3a6e");
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#ffffff");
+      doc.text("#", colX.idx + 6, y + 8, { width: colW.idx });
+      doc.text("Description", colX.desc, y + 8, { width: colW.desc });
+      doc.text("Qty", colX.qty, y + 8, { width: colW.qty, align: "right" });
+      doc.text("Rate", colX.rate, y + 8, { width: colW.rate, align: "right" });
+      doc.text("Tax %", colX.tax, y + 8, { width: colW.tax, align: "right" });
+      doc.text("Amount", colX.total, y + 8, { width: colW.total, align: "right" });
+    };
+    drawItemsHeader(tableTop);
 
     let rowY = tableTop + 30;
     const items = (invoice.items || []);
     items.forEach((item, idx) => {
-      if (rowY > 720) {
+      const desc = String(item.description || "");
+      // Row height follows the wrapped description, so a long one pushes the next
+      // row down instead of running into it.
+      const rowH = Math.max(ROW_MIN, textHeight(doc, desc, colW.desc) + ROW_PAD);
+      if (rowY + rowH > PAGE_BOTTOM) {
         doc.addPage();
-        rowY = 60;
+        drawItemsHeader(50);
+        rowY = 80;
       }
-      const zebra = idx % 2 === 1;
-      if (zebra) {
-        doc.rect(46, rowY - 6, 503, 24).fill("#f7faff");
+      if (idx % 2 === 1) {
+        doc.rect(46, rowY - 6, 503, rowH).fill("#f7faff");
       }
       const qty = toNumber(item.quantity);
       const unit = toNumber(item.unitPrice);
@@ -174,15 +211,17 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
         : money(unit, invoice.currency);
       doc.font("Helvetica").fontSize(10).fillColor("#142447");
       doc.text(String(idx + 1), colX.idx + 6, rowY, { width: colW.idx });
-      doc.text(item.description, colX.desc, rowY, { width: colW.desc });
-      doc.text(String(qty), colX.qty, rowY, { width: colW.qty, align: "right" });
-      doc.text(rateText, colX.rate - 4, rowY, { width: colW.rate + 4, align: "right" });
-      doc.text(`${toNumber(item.taxRate)}%`, colX.tax, rowY, { width: colW.tax, align: "right" });
-      doc.text(money(item.totalAmount, invoice.currency), colX.total - 10, rowY, { width: colW.total + 10, align: "right" });
-      rowY += 24;
+      doc.font("Helvetica").fontSize(10).text(desc, colX.desc, rowY, { width: colW.desc });
+      // Numbers stay on one line and shrink to fit — never wrap.
+      fitText(doc, String(qty), colX.qty, rowY, colW.qty);
+      fitText(doc, rateText, colX.rate, rowY, colW.rate);
+      fitText(doc, `${toNumber(item.taxRate)}%`, colX.tax, rowY, colW.tax);
+      fitText(doc, money(item.totalAmount, invoice.currency), colX.total, rowY, colW.total - 6);
+      rowY += rowH;
     });
 
     // ---------- Totals box ----------
+    if (rowY + 130 > PAGE_BOTTOM) { doc.addPage(); rowY = 60; }
     const totalsTop = rowY + 12;
     const totalsRows = [
       ["Subtotal", money(invoice.subtotalAmount, invoice.currency)],
@@ -196,8 +235,8 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
     for (const [label, value, opts = {}] of totalsRows) {
       tableRow(doc,
         [
-          { text: label, x: 326, width: 130, align: "right" },
-          { text: value, x: 460, width: 90, align: "right" }
+          { text: label, x: 290, width: 120, align: "right" },
+          { text: value, x: 414, width: 129, align: "right", fit: true }
         ], ty, opts);
       ty += 20;
     }
@@ -212,8 +251,10 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
       sectionTitle(doc, "Payments Received", 46, ty);
       ty += 18;
 
-      const pc = { idx: 46, date: 76, method: 160, note: 252, amount: 372, bal: 456 };
-      const pw = { idx: 26, date: 80, method: 88, note: 116, amount: 80, bal: 93 };
+      // Amount / Balance get ~100pt each and the note column stops well short of
+      // them, so a long note or a big figure can't run into its neighbour.
+      const pc = { idx: 46, date: 76, method: 144, note: 218, amount: 342, bal: 444 };
+      const pw = { idx: 26, date: 64, method: 70, note: 120, amount: 98, bal: 97 };
       const header = () => {
         doc.rect(46, ty, 503, 20).fillAndStroke("#eef3fa", "#dbe4f0");
         doc.font("Helvetica-Bold").fontSize(9).fillColor("#1d3a6e");
@@ -229,16 +270,20 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
 
       let remaining = toNumber(invoice.totalAmount);
       payments.forEach((p, i) => {
-        if (ty > 740) { doc.addPage(); ty = 60; header(); }
+        // A long note wraps and the row grows to fit it — nothing is cut off.
+        const noteH = textHeight(doc, p.note || " ", pw.note, { size: 9 });
+        const methodH = textHeight(doc, p.method || "-", pw.method, { size: 9 });
+        const rowH = Math.max(18, Math.max(noteH, methodH) + 7);
+        if (ty + rowH > 745) { doc.addPage(); ty = 60; header(); }
         remaining = Math.max(remaining - toNumber(p.amount), 0);
         doc.font("Helvetica").fontSize(9).fillColor("#142447");
         doc.text(String(i + 1), pc.idx + 6, ty, { width: pw.idx });
         doc.text(p.paymentDate ? formatDate(p.paymentDate) : "-", pc.date, ty, { width: pw.date });
-        doc.text(p.method || "-", pc.method, ty, { width: pw.method, height: 11, ellipsis: true });
-        doc.text(p.note || "", pc.note, ty, { width: pw.note, height: 11, ellipsis: true });
-        doc.text(money(p.amount, invoice.currency), pc.amount - 12, ty, { width: pw.amount + 12, align: "right" });
-        doc.text(money(remaining, invoice.currency), pc.bal - 6, ty, { width: pw.bal + 6, align: "right" });
-        ty += 18;
+        doc.font("Helvetica").fontSize(9).text(p.method || "-", pc.method, ty, { width: pw.method });
+        doc.font("Helvetica").fontSize(9).text(p.note || "", pc.note, ty, { width: pw.note });
+        fitText(doc, money(p.amount, invoice.currency), pc.amount, ty, pw.amount, { size: 9 });
+        fitText(doc, money(remaining, invoice.currency), pc.bal, ty, pw.bal, { size: 9 });
+        ty += rowH;
       });
     }
 

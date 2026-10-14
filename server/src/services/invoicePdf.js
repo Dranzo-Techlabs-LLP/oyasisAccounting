@@ -38,11 +38,20 @@ const tableRow = (doc, label, value, y, options = {}) => {
     .fontSize(11)
     .fillColor("#142447")
     .text(label, 58, y, { width: 260 });
+  // The amount stays on ONE line: shrink the font until it fits the column
+  // rather than letting a big figure wrap onto a second, clipped line.
+  const vFont = bold ? "Helvetica-Bold" : "Helvetica";
+  let vSize = 11;
+  doc.font(vFont);
+  while (vSize > 6) {
+    doc.fontSize(vSize);
+    if (doc.widthOfString(String(value)) <= 150) break;
+    vSize -= 0.5;
+  }
   doc
-    .font(bold ? "Helvetica-Bold" : "Helvetica")
-    .fontSize(11)
     .fillColor("#142447")
-    .text(value, 380, y, { width: 150, align: "right" });
+    .fontSize(vSize)
+    .text(String(value), 380, y, { width: 150, align: "right", lineBreak: false });
 };
 
 export const buildInvoicePdf = async (booking, options = {}) => {
@@ -227,6 +236,15 @@ export const buildInvoicePdf = async (booking, options = {}) => {
       rows.push({ label: "Amount Paid", value: money(booking.paidAmount), gap: 22 });
     }
     rows.push({ label: "Balance Due", value: money(displayBalance), bold: true, gap: 0 });
+
+    // A long label (e.g. a typed-in extra charge) wraps inside its 260pt column.
+    // Give that row the height it needs so it can't run into the row below; rows
+    // whose label fits on one line keep their normal spacing.
+    for (const r of rows) {
+      doc.font(r.bold ? "Helvetica-Bold" : "Helvetica").fontSize(11);
+      const h = Math.ceil(doc.heightOfString(String(r.label), { width: 260 }));
+      if (h > 15) r.gap = Math.max(r.gap, h + 9);
+    }
 
     const TITLE_PAD_TOP = 18;
     const TITLE_HEIGHT = 28;
