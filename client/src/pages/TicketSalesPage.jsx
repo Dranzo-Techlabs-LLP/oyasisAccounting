@@ -206,18 +206,18 @@ export default function TicketSalesPage() {
                 key: "actions", label: "Actions", sortable: false,
                 render: (s) => (
                   <div className="flex flex-wrap gap-1">
-                    <Button variant="secondary" className="w-10 px-0" title="Quick view" onClick={() => setViewing(s)}>
+                    <Button variant="secondary" size="icon" title="Quick view" onClick={() => setViewing(s)}>
                       <Eye className="h-4 w-4" />
                     </Button>
                     {canWrite && (
-                      <Button variant="secondary" className="w-10 px-0" title="Edit" onClick={async () => {
+                      <Button variant="secondary" size="icon" title="Edit" onClick={async () => {
                         const res = await api.get(`/ticket-sales/${s.id}`);
                         setEditing(res.data); setOpen(true);
                       }}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
-                    <Button variant="secondary" className="w-10 px-0" title="Invoice options" onClick={() => openInvoice(s)}>
+                    <Button variant="secondary" size="icon" title="Invoice options" onClick={() => openInvoice(s)}>
                       <FileText className="h-4 w-4" />
                     </Button>
                     {canWrite && !s.supplierPaid && (
@@ -226,7 +226,7 @@ export default function TicketSalesPage() {
                       </Button>
                     )}
                     {canDelete && (
-                      <Button variant="danger" className="w-10 px-0" title="Delete" onClick={async () => {
+                      <Button variant="danger" size="icon" title="Delete" onClick={async () => {
                         if (!window.confirm("Delete this ticket sale?")) return;
                         try { await api.delete(`/ticket-sales/${s.id}`); toast.success("Deleted"); load(); }
                         catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }

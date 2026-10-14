@@ -84,16 +84,25 @@ export function Button({ variant = "primary", size = "md", className = "", ...pr
       "hover:bg-emerald-700 active:translate-y-[1px]"
   };
 
+  // `icon` is a square, padding-free button for a lone icon. Use it instead of
+  // overriding width/padding with className: Tailwind v4 does not let a later
+  // class in the string beat an earlier one, so `w-9 px-0` on top of the md size's
+  // `px-4` left only ~4px for the icon and it rendered as a speck.
   const sizes = {
+    icon: "h-10 w-10 shrink-0 p-0",
     sm: "h-9 px-3 text-xs gap-1.5",
     md: "h-11 px-4 text-sm gap-2",
     lg: "h-12 px-5 text-base gap-2"
   };
 
+  // An icon-only button must have an accessible name; fall back to its tooltip.
+  const a11y = size === "icon" && !props["aria-label"] && props.title ? { "aria-label": props.title } : {};
+
   return (
     <button
+      {...a11y}
       {...props}
-      className={`inline-flex items-center justify-center rounded-[10px] font-semibold transition-all duration-150 ${sizes[size] || sizes.md} ${variants[variant] || variants.primary} disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 ${className}`}
+      className={`inline-flex cursor-pointer items-center justify-center rounded-[10px] font-semibold transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] ${sizes[size] || sizes.md} ${variants[variant] || variants.primary} disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 ${className}`}
     />
   );
 }

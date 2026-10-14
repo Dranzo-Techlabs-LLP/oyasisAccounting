@@ -149,12 +149,12 @@ export default function BookingsPage() {
       render: (r) => (
         <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
           <Link to={`/bookings/${r.id}`}>
-            <Button variant="secondary" className="w-10 px-0">
+            <Button variant="secondary" size="icon" title="View booking">
               <Eye className="h-4 w-4" />
             </Button>
           </Link>
           {canWrite && (
-            <Button variant="secondary" className="w-10 px-0" onClick={async () => {
+            <Button variant="secondary" size="icon" title="Edit" onClick={async () => {
               const res = await api.get(`/bookings/${r.id}`);
               setEditing(res.data); setOpen(true);
             }}>
@@ -162,7 +162,7 @@ export default function BookingsPage() {
             </Button>
           )}
           {canDelete && (
-            <Button variant="danger" className="w-10 px-0" onClick={async () => {
+            <Button variant="danger" size="icon" title="Delete" onClick={async () => {
               if (!window.confirm("Delete this booking?")) return;
               try { await api.delete(`/bookings/${r.id}`); toast.success("Deleted"); load(); }
               catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }

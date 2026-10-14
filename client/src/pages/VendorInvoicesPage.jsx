@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  Copy, Download, Eye, FileText, MailCheck, Pencil, Plus, Send, Trash2, Wallet, X
+  Ban, Copy, Download, Eye, Pencil, Plus, Send, Trash2, Wallet
 } from "lucide-react";
 import { api } from "../api/client";
 import { Button, Field, Input, Select, Textarea } from "../components/FormPrimitives";
+import { RowActionButton, RowActionsMenu } from "../components/RowActions";
 import Modal from "../components/Modal";
 import VendorInvoiceForm from "../components/VendorInvoiceForm";
 import DataTable from "../components/DataTable";
@@ -26,6 +27,7 @@ export default function VendorInvoicesPage() {
   const [viewing, setViewing] = useState(null);
   const [paymentTarget, setPaymentTarget] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [busyRow, setBusyRow] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -98,22 +100,31 @@ export default function VendorInvoicesPage() {
     } catch (e) { toast.error(e.response?.data?.message || e.message || "Download failed"); }
   };
 
-  const markSent = async (id) => {
-    try { await api.patch(`/vendor-invoices/${id}/mark-sent`); toast.success("Marked sent"); load(); }
+  // One row action at a time: a double-click on "Duplicate" would otherwise
+  // create two copies, and Delete/Cancel shouldn't be fired twice either.
+  const runRowAction = async (id, fn) => {
+    if (busyRow !== null) return;
+    setBusyRow(id);
+    try { await fn(); } finally { setBusyRow(null); }
+  };
+
+  const markSent = async (row) => {
+    try { await api.patch(`/vendor-invoices/${row.id}/mark-sent`); toast.success(`${row.invoiceNumber} marked as sent`); await load(); }
     catch (e) { toast.error(e.response?.data?.message || "Update failed"); }
   };
-  const cancelInv = async (id) => {
-    if (!window.confirm("Cancel this invoice?")) return;
-    try { await api.patch(`/vendor-invoices/${id}/cancel`); toast.success("Cancelled"); load(); }
+  const cancelInv = async (row) => {
+    if (!window.confirm(`Cancel ${row.invoiceNumber}?\n\nIt will be marked CANCELLED. Payments already recorded stay in the ledger.`)) return;
+    try { await api.patch(`/vendor-invoices/${row.id}/cancel`); toast.success(`${row.invoiceNumber} cancelled`); await load(); }
     catch (e) { toast.error(e.response?.data?.message || "Cancel failed"); }
   };
-  const duplicate = async (id) => {
-    try { await api.post(`/vendor-invoices/${id}/duplicate`); toast.success("Duplicated as DRAFT"); load(); }
+  const duplicate = async (row) => {
+    try { await api.post(`/vendor-invoices/${row.id}/duplicate`); toast.success(`Copy of ${row.invoiceNumber} created as a draft`); await load(); }
     catch (e) { toast.error(e.response?.data?.message || "Duplicate failed"); }
   };
-  const deleteInv = async (id) => {
-    if (!window.confirm("Delete this invoice permanently?")) return;
-    try { await api.delete(`/vendor-invoices/${id}`); toast.success("Deleted"); load(); }
+  const deleteInv = async (row) => {
+    // The server also removes this invoice's payment entries from the ledger.
+    if (!window.confirm(`Delete ${row.invoiceNumber} permanently?\n\nThis also removes its recorded payments from the income ledger and can't be undone.`)) return;
+    try { await api.delete(`/vendor-invoices/${row.id}`); toast.success(`${row.invoiceNumber} deleted`); await load(); }
     catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
   };
 
@@ -184,49 +195,35 @@ export default function VendorInvoicesPage() {
     },
     {
       key: "actions", label: "Actions", sortable: false,
-      render: (r) => (
-        <div className="flex flex-wrap gap-1">
-          <Button variant="secondary" className="w-9 px-0" title="View PDF" onClick={() => viewInvoice(r)}>
-            <Eye className="h-4 w-4" />
-          </Button>
-          <Button variant="secondary" className="w-9 px-0" title="Download PDF" onClick={() => downloadInvoice(r)}>
-            <Download className="h-4 w-4" />
-          </Button>
-          {canWrite && r.status !== "PAID" && r.status !== "CANCELLED" && (
-            <Button variant="secondary" className="w-9 px-0" title="Record Payment" onClick={() => setPaymentTarget(r)}>
-              <Wallet className="h-4 w-4" />
-            </Button>
-          )}
-          {canWrite && r.status === "DRAFT" && (
-            <Button variant="secondary" className="w-9 px-0" title="Mark Sent" onClick={() => markSent(r.id)}>
-              <Send className="h-4 w-4" />
-            </Button>
-          )}
-          {canWrite && (
-            <Button variant="secondary" className="w-9 px-0" title="Edit" onClick={async () => {
-              const res = await api.get(`/vendor-invoices/${r.id}`);
-              setEditing(res.data); setOpen(true);
-            }}>
-              <Pencil className="h-4 w-4" />
-            </Button>
-          )}
-          {canWrite && (
-            <Button variant="secondary" className="w-9 px-0" title="Duplicate" onClick={() => duplicate(r.id)}>
-              <Copy className="h-4 w-4" />
-            </Button>
-          )}
-          {canWrite && r.status !== "CANCELLED" && (
-            <Button variant="secondary" className="w-9 px-0" title="Cancel" onClick={() => cancelInv(r.id)}>
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-          {canDelete && (
-            <Button variant="danger" className="w-9 px-0" title="Delete" onClick={() => deleteInv(r.id)}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      )
+      render: (r) => {
+        const payable = canWrite && r.status !== "PAID" && r.status !== "CANCELLED";
+        const rowBusy = busyRow === r.id;
+        const editInvoice = async () => {
+          try {
+            const res = await api.get(`/vendor-invoices/${r.id}`);
+            setEditing(res.data); setOpen(true);
+          } catch (e) { toast.error(e.response?.data?.message || "Couldn't open the invoice"); }
+        };
+        // Everything beyond the everyday actions lives in the menu. Read-only
+        // users have no write actions, so Download stays one click away for them.
+        const menuItems = [
+          { label: "Download PDF", icon: Download, onClick: () => downloadInvoice(r) },
+          { label: "Mark as sent", icon: Send, onClick: () => runRowAction(r.id, () => markSent(r)), hidden: !(canWrite && r.status === "DRAFT"), disabled: rowBusy },
+          { label: "Duplicate", icon: Copy, onClick: () => runRowAction(r.id, () => duplicate(r)), hidden: !canWrite, disabled: rowBusy },
+          { label: "Cancel invoice", icon: Ban, onClick: () => runRowAction(r.id, () => cancelInv(r)), hidden: !(canWrite && r.status !== "CANCELLED"), disabled: rowBusy },
+          { label: "Delete invoice", icon: Trash2, tone: "danger", dividerBefore: true, onClick: () => runRowAction(r.id, () => deleteInv(r)), hidden: !canDelete, disabled: rowBusy }
+        ];
+        return (
+          <div className="flex items-center gap-2">
+            <RowActionButton icon={Eye} label="View invoice" text="View" showLabel onClick={() => viewInvoice(r)} />
+            {canWrite && <RowActionButton icon={Pencil} label="Edit invoice" onClick={editInvoice} />}
+            {payable && <RowActionButton icon={Wallet} label="Add payment" tone="primary" showLabel onClick={() => setPaymentTarget(r)} />}
+            {canWrite || canDelete
+              ? <RowActionsMenu label={`More actions for ${r.invoiceNumber}`} items={menuItems} />
+              : <RowActionButton icon={Download} label="Download PDF" onClick={() => downloadInvoice(r)} />}
+          </div>
+        );
+      }
     }
   ];
 

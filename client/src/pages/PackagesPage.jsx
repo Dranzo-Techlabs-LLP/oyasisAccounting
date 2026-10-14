@@ -161,14 +161,15 @@ export default function PackagesPage() {
                 </div>
                 <div className="mt-5 flex justify-end gap-2">
                   {canWrite && (
-                    <Button variant="secondary" className="w-11 px-0" onClick={() => { setEditing(item); setOpen(true); }}>
+                    <Button variant="secondary" size="icon" title="Edit" onClick={() => { setEditing(item); setOpen(true); }}>
                       <Pencil className="h-4 w-4" />
                     </Button>
                   )}
                   {canDelete && (
                     <Button
                       variant="danger"
-                      className="w-11 px-0"
+                      size="icon"
+                      title="Delete"
                       onClick={async () => {
                         if (!window.confirm("Delete this package?")) return;
                         await api.delete(`/packages/${item.id}`);

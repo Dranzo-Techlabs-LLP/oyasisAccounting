@@ -71,12 +71,12 @@ export default function CustomersPage() {
       render: (r) => (
         <div className="flex gap-2">
           {canWrite && (
-            <Button variant="secondary" className="w-10 px-0" onClick={() => { setEditing(r); setOpen(true); }}>
+            <Button variant="secondary" size="icon" title="Edit" onClick={() => { setEditing(r); setOpen(true); }}>
               <Pencil className="h-4 w-4" />
             </Button>
           )}
           {canDelete && (
-            <Button variant="danger" className="w-10 px-0" onClick={async () => {
+            <Button variant="danger" size="icon" title="Delete" onClick={async () => {
               if (!window.confirm("Delete this customer?")) return;
               try { await api.delete(`/customers/${r.id}`); toast.success("Customer deleted"); load(); }
               catch (e) { toast.error(e.response?.data?.message || "Delete failed"); }
