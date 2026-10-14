@@ -216,7 +216,11 @@ export const buildVendorInvoicePdf = async (invoice, options = {}) => {
       fitText(doc, String(qty), colX.qty, rowY, colW.qty);
       fitText(doc, rateText, colX.rate, rowY, colW.rate);
       fitText(doc, `${toNumber(item.taxRate)}%`, colX.tax, rowY, colW.tax);
-      fitText(doc, money(item.totalAmount, invoice.currency), colX.total, rowY, colW.total - 6);
+      // The line shows the plain qty x rate figure. Any discount is taken off
+      // once, in the totals below — not inside the line — so the lines add up to
+      // the Subtotal and the Discount row explains the difference. (item.totalAmount
+      // is the net-of-discount-plus-tax figure and is deliberately not used here.)
+      fitText(doc, money(qty * unit, invoice.currency), colX.total, rowY, colW.total - 6);
       rowY += rowH;
     });
 
