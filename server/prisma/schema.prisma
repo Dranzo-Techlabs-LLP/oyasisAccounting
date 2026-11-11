@@ -12,6 +12,7 @@ enum Role {
   MANAGER
   ACCOUNTANT
   AGENT
+  TRIP_DESIGNER
   VIEWER
 }
 

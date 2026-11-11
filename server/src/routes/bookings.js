@@ -11,6 +11,9 @@ import { computeBookingAmounts } from "../utils/bookingMath.js";
 import { nextBookingCode } from "../utils/codeGenerators.js";
 import { toNumber } from "../utils/formatters.js";
 import { optionalString, optionalEmail, optionalDateString } from "../utils/zodHelpers.js";
+import { B2B_PARTNERS, getBookedByOptions, isValidBookedBy } from "../utils/bookedBy.js";
+
+const BOOKED_BY_INVALID = "Please choose who booked this from the Booked By list.";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,9 +103,9 @@ const ticketSchema = z.object({
   note: optionalString
 });
 
-// Allowed "Booked By" options. Keep in sync with the client dropdown.
-export const BOOKED_BY_OPTIONS = ["Shameer", "Abhijith", "Sahla", "Adithya", "Shahana", "B2B Partners"];
-const B2B_PARTNERS = "B2B Partners";
+// "Booked By" options are built from the core team + active users (see
+// utils/bookedBy.js) and validated in the POST/PUT handlers, so a newly added
+// user becomes selectable without a code change.
 
 const bookingSchema = z.object({
   customerId: z.coerce.number().int().positive().optional(),
@@ -125,7 +128,7 @@ const bookingSchema = z.object({
   tickets: z.array(ticketSchema).optional(),
   bookingStatus: z.nativeEnum(BookingStatus),
   // Required: who booked this.
-  bookedBy: z.enum(BOOKED_BY_OPTIONS, { errorMap: () => ({ message: "Booked By is required" }) }),
+  bookedBy: z.string({ required_error: "Booked By is required" }).trim().min(1, "Booked By is required").max(120),
   // Only meaningful when bookedBy === "B2B Partners".
   bookedByPartner: optionalString,
   notes: optionalString
@@ -298,6 +301,11 @@ router.get("/overview", async (req, res) => {
   });
 });
 
+// Dropdown source for the booking form (must stay above "/:id").
+router.get("/booked-by-options", async (_req, res) => {
+  res.json({ items: await getBookedByOptions(), b2bPartners: B2B_PARTNERS });
+});
+
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
   const booking = await prisma.booking.findUnique({
@@ -314,6 +322,9 @@ router.get("/:id", async (req, res) => {
 
 router.post("/", async (req, res) => {
   const body = bookingSchema.parse(req.body);
+  if (!(await isValidBookedBy(body.bookedBy))) {
+    return res.status(400).json({ message: BOOKED_BY_INVALID });
+  }
   const travelPackage = await prisma.package.findUnique({ where: { id: body.packageId } });
 
   if (!travelPackage) {
@@ -462,6 +473,9 @@ router.put("/:id", async (req, res) => {
   const existing = await prisma.booking.findUnique({ where: { id } });
   if (!existing) {
     return res.status(404).json({ message: "Booking not found" });
+  }
+  if (!(await isValidBookedBy(body.bookedBy, existing.bookedBy))) {
+    return res.status(400).json({ message: BOOKED_BY_INVALID });
   }
 
   // Same defensive coercion as POST: a 0 override is treated as "no

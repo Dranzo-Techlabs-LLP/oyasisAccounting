@@ -2,7 +2,7 @@ import { prisma } from "./prisma.js";
 
 // The full set of roles the app knows about. ADMIN is special-cased to always
 // have every right, so it isn't editable in the Roles & Rights UI.
-export const ROLES = ["ADMIN", "MANAGER", "ACCOUNTANT", "AGENT", "VIEWER"];
+export const ROLES = ["ADMIN", "MANAGER", "ACCOUNTANT", "AGENT", "TRIP_DESIGNER", "VIEWER"];
 
 // Action → human label used by the Roles & Rights grid.
 export const ACTION_LABELS = {
@@ -114,6 +114,16 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   AGENT: grant({
     dashboard: "all", bookings: ["read", "write"], calendar: ["read"], overview: ["read"],
     ticketSales: ["read", "write"], customers: ["read", "write"], packages: ["read"],
+    accounts: [], invoices: ["read"], ledger: [],
+    vendors: [], vendorInvoices: [],
+    users: [], settings: [], roles: []
+  }),
+  // Builds and maintains the travel packages / itineraries, and works on the
+  // bookings and customers that use them. No accounting, vendors or admin.
+  // Starting point only — adjust on the Roles & Rights page.
+  TRIP_DESIGNER: grant({
+    dashboard: "all", bookings: ["read", "write"], calendar: ["read"], overview: ["read"],
+    ticketSales: ["read"], customers: ["read", "write"], packages: "all",
     accounts: [], invoices: ["read"], ledger: [],
     vendors: [], vendorInvoices: [],
     users: [], settings: [], roles: []

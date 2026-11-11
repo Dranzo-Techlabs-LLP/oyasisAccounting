@@ -18,8 +18,9 @@ const TICKET_COLOR  = "bg-sky-100 text-sky-800 ring-sky-300";
 // ---------------------------------------------------------------------------
 // Calendar event colours by "Booked By".
 //
-// To add a new team member + colour in the future, add ONE entry here keyed
-// by the exact "Booked By" value. Each entry has:
+// Fixed colours for the original team. Users added later get a colour from
+// EXTRA_COLORS automatically; to pin a specific colour for someone, add an
+// entry here keyed by their exact "Booked By" value. Each entry has:
 //   chip   - the pill classes for the event (light bg + dark text = readable)
 //   border - the left/outline border on the day-detail card
 //   dot    - the little status dot shown before the name
@@ -35,6 +36,33 @@ const BOOKED_BY_COLORS = {
   "B2B Partners": { color: "Yellow", chip: "bg-yellow-100 text-yellow-800 ring-yellow-300",    border: "border-yellow-300",  dot: "bg-yellow-500" }
 };
 
+// Colours handed out automatically to users added later (anyone in the Booked
+// By list who isn't above), in the order the users were created. Chosen to be
+// distinct from the fixed colours above and from the sky-blue flight tickets.
+const EXTRA_COLORS = [
+  { color: "Teal",    chip: "bg-teal-100 text-teal-800 ring-teal-300",          border: "border-teal-300",    dot: "bg-teal-500" },
+  { color: "Pink",    chip: "bg-pink-100 text-pink-800 ring-pink-300",          border: "border-pink-300",    dot: "bg-pink-500" },
+  { color: "Indigo",  chip: "bg-indigo-100 text-indigo-800 ring-indigo-300",    border: "border-indigo-300",  dot: "bg-indigo-500" },
+  { color: "Lime",    chip: "bg-lime-100 text-lime-800 ring-lime-300",          border: "border-lime-300",    dot: "bg-lime-500" },
+  { color: "Fuchsia", chip: "bg-fuchsia-100 text-fuchsia-800 ring-fuchsia-300", border: "border-fuchsia-300", dot: "bg-fuchsia-500" },
+  { color: "Brown",   chip: "bg-amber-100 text-amber-900 ring-amber-400",       border: "border-amber-400",   dot: "bg-amber-800" },
+  { color: "Grey",    chip: "bg-slate-200 text-slate-800 ring-slate-400",       border: "border-slate-400",   dot: "bg-slate-500" },
+  { color: "Cyan",    chip: "bg-cyan-100 text-cyan-800 ring-cyan-300",          border: "border-cyan-300",    dot: "bg-cyan-500" }
+];
+
+// Full name → colour map: the fixed entries plus an automatic colour for every
+// other Booked By option the server returns (i.e. newly added users).
+const buildColorMap = (options = []) => {
+  const map = { ...BOOKED_BY_COLORS };
+  let i = 0;
+  for (const name of options) {
+    if (map[name]) continue;
+    map[name] = EXTRA_COLORS[i % EXTRA_COLORS.length];
+    i += 1;
+  }
+  return map;
+};
+
 // Fallback for bookings with no "Booked By" (older records) — original green.
 const DEFAULT_BOOKING_COLORS = { chip: BOOKING_COLOR, border: "border-emerald-300", dot: "bg-emerald-500" };
 const TICKET_COLORS = { chip: TICKET_COLOR, border: "border-sky-300", dot: "bg-sky-500" };
@@ -42,9 +70,9 @@ const TICKET_COLORS = { chip: TICKET_COLOR, border: "border-sky-300", dot: "bg-s
 // Resolve the colour set for any calendar event. Ticket sales keep their blue;
 // bookings are coloured by Booked By (B2B Partners is always yellow, whatever
 // partner name was typed).
-const eventColors = (ev) => {
+const eventColors = (ev, colorMap) => {
   if (ev.kind !== "booking") return TICKET_COLORS;
-  return BOOKED_BY_COLORS[ev.bookedBy] || DEFAULT_BOOKING_COLORS;
+  return colorMap[ev.bookedBy] || DEFAULT_BOOKING_COLORS;
 };
 
 export default function CalendarPage() {
@@ -66,6 +94,8 @@ export default function CalendarPage() {
   };
 
   useEffect(() => { load(month); }, [month]);
+
+  const colorMap = useMemo(() => buildColorMap(data?.bookedByOptions), [data]);
 
   const cells = useMemo(() => {
     const start = dayjs(`${month}-01`).startOf("month");
@@ -180,7 +210,7 @@ export default function CalendarPage() {
                   </div>
                   <div className="space-y-1">
                     {events.slice(0, 3).map((ev) => {
-                      const colors = eventColors(ev);
+                      const colors = eventColors(ev, colorMap);
                       return (
                         <div key={`${ev.kind}-${ev.id}`}
                           className={`flex items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ${colors.chip}`}
@@ -210,7 +240,9 @@ export default function CalendarPage() {
         <div className="panel rounded-lg p-4">
           <h3 className="mb-3 text-sm font-semibold text-[var(--text)]">Booked By — colour key</h3>
           <div className="flex flex-wrap gap-x-6 gap-y-2">
-            {Object.entries(BOOKED_BY_COLORS).map(([name, c]) => (
+            {Object.entries(colorMap)
+              .sort(([a], [b]) => (a === "B2B Partners") - (b === "B2B Partners"))
+              .map(([name, c]) => (
               <div key={name} className="flex items-center gap-2 text-sm">
                 <span className={`inline-block h-3 w-3 shrink-0 rounded-full ${c.dot}`} />
                 <span className="text-[var(--text)]">{name}</span>
@@ -230,7 +262,7 @@ export default function CalendarPage() {
         {dayDetail && (
           <div className="space-y-2">
             {dayDetail.events.map((ev) => {
-              const colors = eventColors(ev);
+              const colors = eventColors(ev, colorMap);
               return (
               <button
                 key={`${ev.kind}-${ev.id}`}

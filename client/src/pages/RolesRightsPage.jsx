@@ -4,12 +4,14 @@ import { Shield, Save, RotateCcw, Check } from "lucide-react";
 import { api } from "../api/client";
 import { Button } from "../components/FormPrimitives";
 import { SkeletonBlock } from "../components/Feedback";
+import { roleLabel } from "../utils/roles";
 
 const ROLE_BLURB = {
   ADMIN: "Full access to every feature. Cannot be edited.",
   MANAGER: "Runs day-to-day operations across bookings, sales and accounting.",
   ACCOUNTANT: "Focused on invoices, payments and financial reports.",
   AGENT: "Creates and edits bookings, ticket sales and customers.",
+  TRIP_DESIGNER: "Designs and maintains travel packages and itineraries; works on the bookings and customers that use them.",
   VIEWER: "Read-only access across the app."
 };
 
@@ -150,7 +152,7 @@ export default function RolesRightsPage() {
                 }`}
               >
                 <Shield className={`h-4 w-4 ${active ? "text-white" : "text-[var(--text-soft)]"}`} />
-                <span className="flex-1 font-medium capitalize">{r.role.toLowerCase()}</span>
+                <span className="flex-1 font-medium">{roleLabel(r.role)}</span>
                 {!r.editable && (
                   <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ${active ? "bg-white/20" : "bg-[var(--surface-muted)] text-[var(--text-soft)]"}`}>system</span>
                 )}
@@ -164,7 +166,7 @@ export default function RolesRightsPage() {
         <div className="panel rounded-lg p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--line)] pb-4">
             <div>
-              <h3 className="text-base font-semibold capitalize text-[var(--text)]">{activeRole.toLowerCase()}</h3>
+              <h3 className="text-base font-semibold text-[var(--text)]">{roleLabel(activeRole)}</h3>
               <p className="mt-0.5 text-xs text-[var(--text-soft)]">{ROLE_BLURB[activeRole] || ""}</p>
             </div>
             <div className="flex items-center gap-2">

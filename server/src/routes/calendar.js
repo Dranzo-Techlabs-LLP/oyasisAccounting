@@ -2,6 +2,7 @@ import dayjs from "dayjs";
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { toNumber } from "../utils/formatters.js";
+import { getBookedByOptions } from "../utils/bookedBy.js";
 
 const router = Router();
 
@@ -10,7 +11,7 @@ router.get("/", async (req, res) => {
   const start = dayjs(`${monthParam}-01`).startOf("month").subtract(7, "day").toDate();
   const end = dayjs(`${monthParam}-01`).endOf("month").add(7, "day").toDate();
 
-  const [bookings, ticketSales] = await Promise.all([
+  const [bookings, ticketSales, bookedByOptions] = await Promise.all([
     prisma.booking.findMany({
       where: {
         OR: [
@@ -27,11 +28,14 @@ router.get("/", async (req, res) => {
       where: { departAt: { gte: start, lte: end }, ticketType: "FLIGHT" },
       include: { customer: true },
       orderBy: { departAt: "asc" }
-    })
+    }),
+    getBookedByOptions()
   ]);
 
   res.json({
     month: monthParam,
+    // Same list as the booking form's Booked By dropdown — drives the colour key.
+    bookedByOptions,
     bookings: bookings.map((b) => ({
       id: b.id,
       kind: "booking",

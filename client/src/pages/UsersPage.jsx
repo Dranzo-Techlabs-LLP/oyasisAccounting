@@ -9,12 +9,14 @@ import StatusBadge from "../components/StatusBadge";
 import { SkeletonBlock } from "../components/Feedback";
 import { formatDate } from "../utils/formatters";
 import { useAuth } from "../context/AuthContext";
+import { roleLabel } from "../utils/roles";
 
 const ROLES = [
   ["ADMIN",      "Full access to everything incl Settings + Users"],
   ["MANAGER",    "All bookings/sales/customers/accounts; no Settings/Users"],
   ["ACCOUNTANT", "Accounts + read-only bookings/sales"],
   ["AGENT",      "Create/edit bookings + customers; no delete; no accounts"],
+  ["TRIP_DESIGNER", "Packages/itineraries + edit bookings & customers; no accounts"],
   ["VIEWER",     "Read-only across everything"]
 ];
 
@@ -50,6 +52,11 @@ const PRESET_PERMISSIONS = {
   AGENT: {
     bookings: { read: true, write: true }, ticketSales: { read: true, write: true },
     customers: { read: true, write: true }, packages: { read: true }, invoices: { read: true }, accounts: {},
+    menu: { dashboard: true, packages: true, customers: true, bookings: true, ticketSales: true, calendar: true, overview: true, accounts: false }
+  },
+  TRIP_DESIGNER: {
+    bookings: { read: true, write: true }, ticketSales: { read: true },
+    customers: { read: true, write: true }, packages: { read: true, write: true, delete: true }, invoices: { read: true }, accounts: {},
     menu: { dashboard: true, packages: true, customers: true, bookings: true, ticketSales: true, calendar: true, overview: true, accounts: false }
   },
   VIEWER: {
@@ -96,10 +103,10 @@ export default function UsersPage() {
       key: "role", label: "Role",
       accessor: (r) => r.role,
       filterType: "select",
-      filterOptions: ROLES.map(([v]) => ({ value: v, label: v })),
+      filterOptions: ROLES.map(([v]) => ({ value: v, label: roleLabel(v) })),
       render: (r) => (
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
-          <Shield className="h-3 w-3" /> {r.role}
+          <Shield className="h-3 w-3" /> {roleLabel(r.role)}
         </span>
       )
     },
@@ -268,7 +275,7 @@ function UserForm({ initialValues, onSubmit, busy }) {
         </Field>
         <Field label="Role">
           <Select value={form.role} onChange={(e) => applyPreset(e.target.value)}>
-            {ROLES.map(([v]) => <option key={v} value={v}>{v}</option>)}
+            {ROLES.map(([v]) => <option key={v} value={v}>{roleLabel(v)}</option>)}
           </Select>
         </Field>
         <Field label="Status">
@@ -283,7 +290,7 @@ function UserForm({ initialValues, onSubmit, busy }) {
       <div className="rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-4">
         <p className="text-sm font-semibold text-[var(--text)]">Permissions</p>
         <p className="mt-1 text-xs text-[var(--text-soft)]">
-          This user inherits the rights of the <span className="font-semibold capitalize">{form.role.toLowerCase()}</span> role.
+          This user inherits the rights of the <span className="font-semibold">{roleLabel(form.role)}</span> role.
           To change what this role can see and do, open <a href="/roles" className="font-medium text-[var(--brand)] underline-offset-2 hover:underline">Roles &amp; Rights</a>.
           The Administrator role always has full access.
         </p>

@@ -1,3 +1,4 @@
+import { roleLabel } from "../utils/roles";
 import {
   Building2,
   CalendarRange,
@@ -165,7 +166,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-semibold text-white">{user.fullName || user.email}</p>
                 <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-white/60">
-                  <Shield className="h-3 w-3" /> {user.role}
+                  <Shield className="h-3 w-3" /> {roleLabel(user.role)}
                 </p>
               </div>
               {logout && (

@@ -43,8 +43,10 @@ const TICKET_TYPES = [
   ["OTHER", "Other"]
 ];
 
-// "Booked By" options — keep in sync with the server's BOOKED_BY_OPTIONS.
-const BOOKED_BY_OPTIONS = ["Shameer", "Abhijith", "Sahla", "Adithya", "Shahana", "B2B Partners"];
+// "Booked By" options come from the server (core team + every active user),
+// so a user added on the Users page shows up here automatically. This list is
+// only the fallback if that request fails.
+const FALLBACK_BOOKED_BY = ["Shameer", "Abhijith", "Sahla", "Adithya", "Shahana", "B2B Partners"];
 const B2B_PARTNERS = "B2B Partners";
 
 const initialForm = {
@@ -96,6 +98,28 @@ export default function BookingForm({
   const fileInputRef = useRef(null);
   const dragCounter = useRef(0);
   const isEdit = Boolean(initialValues?.id);
+  const [bookedByOptions, setBookedByOptions] = useState(FALLBACK_BOOKED_BY);
+
+  // Fetch fresh each time the form mounts (it's inside a modal, so this runs
+  // on every open) — a newly added user appears without a page reload.
+  useEffect(() => {
+    let alive = true;
+    api.get("/bookings/booked-by-options")
+      .then((res) => { if (alive && res.data?.items?.length) setBookedByOptions(res.data.items); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Keep a booking's existing value selectable even if that person is no
+  // longer an active user, so editing an old booking doesn't blank the field.
+  const bookedByChoices = useMemo(() => {
+    const current = form.bookedBy;
+    if (!current || bookedByOptions.includes(current)) return bookedByOptions;
+    const list = [...bookedByOptions];
+    const at = list.indexOf(B2B_PARTNERS);
+    list.splice(at < 0 ? list.length : at, 0, current);
+    return list;
+  }, [bookedByOptions, form.bookedBy]);
 
   useEffect(() => {
     if (initialValues) {
@@ -638,7 +662,7 @@ export default function BookingForm({
                 }))}
               >
                 <option value="">Select who booked</option>
-                {BOOKED_BY_OPTIONS.map((o) => (
+                {bookedByChoices.map((o) => (
                   <option key={o} value={o}>{o}</option>
                 ))}
               </Select>

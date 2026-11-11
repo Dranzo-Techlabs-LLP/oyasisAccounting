@@ -1038,6 +1038,23 @@ export async function mockRequest(method, url, config = {}) {
     });
   }
 
+  if (route === "/bookings/booked-by-options" && method === "get") {
+    // Mirrors the server: core team + active named users + "B2B Partners".
+    const core = ["Shameer", "Abhijith", "Sahla", "Adithya", "Shahana"];
+    const seen = new Set(core.map((n) => n.toLowerCase()));
+    const items = [...core];
+    for (const u of state.users || []) {
+      const name = String(u.fullName || "").replace(/\s+/g, " ").trim();
+      if (!name || u.isActive === false) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key) || core.some((c) => c.toLowerCase() === key.split(" ")[0])) continue;
+      if (/^b2b\s*partner/i.test(name)) continue;
+      seen.add(key);
+      items.push(name);
+    }
+    items.push("B2B Partners");
+    return createResponse({ items, b2bPartners: "B2B Partners" });
+  }
   if (/^\/bookings\/\d+$/.test(route) && method === "get") {
     const id = Number(route.split("/")[2]);
     return createResponse(withRelations(state, state.bookings.find((item) => item.id === id)));
@@ -1253,7 +1270,7 @@ export async function mockRequest(method, url, config = {}) {
     const readOnly = () => Object.fromEntries(allModules.map((m) => [m.key, { read: true }]));
     if (!state.rolePermissions) {
       state.rolePermissions = {
-        MANAGER: full(), ACCOUNTANT: readOnly(), AGENT: readOnly(), VIEWER: readOnly()
+        MANAGER: full(), ACCOUNTANT: readOnly(), AGENT: readOnly(), TRIP_DESIGNER: readOnly(), VIEWER: readOnly()
       };
       saveState(state);
     }
@@ -1261,7 +1278,7 @@ export async function mockRequest(method, url, config = {}) {
     return createResponse({
       catalog,
       actionLabels: { read: "View", write: "Create / Edit", delete: "Delete" },
-      roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "AGENT", "VIEWER"].map((role) => ({
+      roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "AGENT", "TRIP_DESIGNER", "VIEWER"].map((role) => ({
         role,
         system: true,
         editable: role !== "ADMIN",
@@ -1269,14 +1286,14 @@ export async function mockRequest(method, url, config = {}) {
       }))
     });
   }
-  if (/^\/roles\/[A-Z]+$/.test(route) && method === "put") {
+  if (/^\/roles\/[A-Z_]+$/.test(route) && method === "put") {
     const role = route.split("/")[2];
     state.rolePermissions = state.rolePermissions || {};
     state.rolePermissions[role] = payload.permissions || {};
     saveState(state);
     return createResponse({ role, permissions: state.rolePermissions[role] });
   }
-  if (/^\/roles\/[A-Z]+\/reset$/.test(route) && method === "post") {
+  if (/^\/roles\/[A-Z_]+\/reset$/.test(route) && method === "post") {
     const role = route.split("/")[2];
     return createResponse({ role, permissions: state.rolePermissions?.[role] || {} });
   }
